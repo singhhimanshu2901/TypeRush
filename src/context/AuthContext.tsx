@@ -47,38 +47,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      const existingLocalUser = ApiService.getUser();
+      const isSameUser = existingLocalUser.id === fbUser.uid;
+
       if (snapshot.exists()) {
         const data = snapshot.data();
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
-        const computedBestWpm = Math.max(data.bestWpm || 0, maxRaceWpm);
-        const computedTotalRaces = Math.max(data.totalRaces || 0, races.length);
-        const computedWins = data.wins ?? data.totalWins ?? races.filter((r) => r.finishPosition === 1).length;
-        const computedAvgWpm = races.length > 0
-          ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
-          : (data.avgWpm || 0);
-        const computedAvgAcc = races.length > 0
-          ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
-          : (data.avgAccuracy || 100);
+        const computedBestWpm = Math.max(data.bestWpm || 0, maxRaceWpm, isSameUser ? existingLocalUser.bestWpm || 0 : 0);
+        const computedTotalRaces = Math.max(data.totalRaces || 0, races.length, isSameUser ? existingLocalUser.totalRaces || 0 : 0);
+        const computedWins = Math.max(
+          data.wins ?? data.totalWins ?? 0,
+          races.filter((r) => r.finishPosition === 1).length,
+          isSameUser ? existingLocalUser.totalWins || 0 : 0
+        );
+        const computedXp = Math.max(data.xp || 0, isSameUser ? existingLocalUser.xp || 0 : 0);
+        const computedLevel = Math.max(data.level || 1, Math.floor(computedXp / 500) + 1);
+
+        const computedUnlockedCars = Array.from(
+          new Set([
+            ...(data.unlockedCars || ['car-apex-racer']),
+            ...(isSameUser ? existingLocalUser.unlockedCars || [] : []),
+          ])
+        );
+
+        const computedUnlockedBadges = Array.from(
+          new Set([
+            ...(data.unlockedBadges || []),
+            ...(isSameUser ? existingLocalUser.unlockedBadges || [] : []),
+          ])
+        );
+
+        const computedAvgWpm =
+          races.length > 0
+            ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
+            : data.avgWpm || (isSameUser ? existingLocalUser.avgWpm : 0);
+
+        const computedAvgAcc =
+          races.length > 0
+            ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
+            : data.avgAccuracy || (isSameUser ? existingLocalUser.avgAccuracy : 100);
+
+        const computedEquippedCarId =
+          data.equippedCarId || (isSameUser ? existingLocalUser.equippedCarId : null) || 'car-apex-racer';
 
         const profile: User = {
           id: fbUser.uid,
-          username: data.displayName || fbUser.displayName || 'Driver',
+          username: data.displayName || fbUser.displayName || (isSameUser ? existingLocalUser.username : null) || 'Driver',
           email: fbUser.email || '',
-          avatar: fbUser.photoURL || data.photoURL || '🏎️',
-          level: data.level || 1,
-          xp: data.xp || 0,
-          currentStreak: data.currentStreak || 1,
-          longestStreak: data.longestStreak || 1,
-          lastRaceDate: data.lastRaceDate || data.lastPlayedDate || new Date().toISOString().split('T')[0],
+          avatar: fbUser.photoURL || data.photoURL || (isSameUser ? existingLocalUser.avatar : null) || '🏎️',
+          level: computedLevel,
+          xp: computedXp,
+          currentStreak: Math.max(data.currentStreak || 1, isSameUser ? existingLocalUser.currentStreak || 1 : 1),
+          longestStreak: Math.max(data.longestStreak || 1, isSameUser ? existingLocalUser.longestStreak || 1 : 1),
+          lastRaceDate:
+            data.lastRaceDate ||
+            data.lastPlayedDate ||
+            (isSameUser ? existingLocalUser.lastRaceDate : null) ||
+            new Date().toISOString().split('T')[0],
           totalRaces: computedTotalRaces,
           totalWins: computedWins,
           avgWpm: computedAvgWpm,
           bestWpm: computedBestWpm,
           avgAccuracy: computedAvgAcc,
-          equippedCarId: data.equippedCarId || 'car-apex-racer',
-          unlockedCars: data.unlockedCars || ['car-apex-racer'],
-          unlockedBadges: data.unlockedBadges || [],
-          title: data.title || 'Rookie Driver',
+          equippedCarId: computedEquippedCarId,
+          unlockedCars: computedUnlockedCars,
+          unlockedBadges: computedUnlockedBadges,
+          title: data.title || (isSameUser ? existingLocalUser.title : null) || 'Rookie Driver',
         };
 
         if (auth.currentUser?.uid === fbUser.uid) {
@@ -100,56 +134,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const currentBadgesJson = JSON.stringify(data.unlockedBadges || []);
         const resolvedBadgesJson = JSON.stringify(resolvedUnlockedBadges);
 
-        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces || currentBadgesJson !== resolvedBadgesJson) {
-          await updateDoc(userRef, {
-            bestWpm: computedBestWpm,
-            avgWpm: computedAvgWpm,
-            avgAccuracy: computedAvgAcc,
-            totalRaces: computedTotalRaces,
-            wins: computedWins,
-            unlockedBadges: resolvedUnlockedBadges,
-            updatedAt: serverTimestamp(),
-          });
+        if (
+          (data.xp || 0) < computedXp ||
+          (data.bestWpm || 0) < computedBestWpm ||
+          (data.totalRaces || 0) < computedTotalRaces ||
+          currentBadgesJson !== resolvedBadgesJson
+        ) {
+          await setDoc(
+            userRef,
+            {
+              uid: fbUser.uid,
+              xp: computedXp,
+              level: computedLevel,
+              bestWpm: computedBestWpm,
+              avgWpm: computedAvgWpm,
+              avgAccuracy: computedAvgAcc,
+              totalRaces: computedTotalRaces,
+              wins: computedWins,
+              totalWins: computedWins,
+              unlockedCars: computedUnlockedCars,
+              unlockedBadges: resolvedUnlockedBadges,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
         }
 
         // Update public leaderboard entry
-        await setDoc(doc(db, 'leaderboards', fbUser.uid), {
-          uid: fbUser.uid,
-          displayName: profile.username,
-          avatar: profile.avatar,
-          level: profile.level,
-          title: profile.title,
-          bestWpm: profile.bestWpm,
-          avgAccuracy: profile.avgAccuracy,
-          totalWins: profile.totalWins,
-          totalRaces: profile.totalRaces,
-          xp: profile.xp,
-          equippedCarId: profile.equippedCarId,
-          updatedAt: serverTimestamp(),
-        });
+        await setDoc(
+          doc(db, 'leaderboards', fbUser.uid),
+          {
+            uid: fbUser.uid,
+            displayName: profile.username,
+            avatar: profile.avatar,
+            level: profile.level,
+            title: profile.title,
+            bestWpm: profile.bestWpm,
+            avgAccuracy: profile.avgAccuracy,
+            totalWins: profile.totalWins,
+            totalRaces: profile.totalRaces,
+            xp: profile.xp,
+            equippedCarId: profile.equippedCarId,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       } else {
         // First-time user doc creation
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
 
         const newProfile: User = {
           id: fbUser.uid,
-          username: fbUser.displayName || 'Racer',
+          username: fbUser.displayName || (isSameUser ? existingLocalUser.username : null) || 'Racer',
           email: fbUser.email || '',
-          avatar: fbUser.photoURL || '🏎️',
-          level: 1,
-          xp: 100,
-          currentStreak: 1,
-          longestStreak: 1,
-          lastRaceDate: new Date().toISOString().split('T')[0],
-          totalRaces: races.length,
-          totalWins: races.filter((r) => r.finishPosition === 1).length,
-          avgWpm: races.length > 0 ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length) : 0,
-          bestWpm: maxRaceWpm,
-          avgAccuracy: races.length > 0 ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10 : 100,
-          equippedCarId: 'car-apex-racer',
-          unlockedCars: ['car-apex-racer'],
-          unlockedBadges: ['ach-first-race'],
-          title: 'Rookie Driver',
+          avatar: fbUser.photoURL || (isSameUser ? existingLocalUser.avatar : null) || '🏎️',
+          level: Math.max(1, isSameUser ? existingLocalUser.level || 1 : 1),
+          xp: Math.max(100, isSameUser ? existingLocalUser.xp || 100 : 100),
+          currentStreak: Math.max(1, isSameUser ? existingLocalUser.currentStreak || 1 : 1),
+          longestStreak: Math.max(1, isSameUser ? existingLocalUser.longestStreak || 1 : 1),
+          lastRaceDate: (isSameUser ? existingLocalUser.lastRaceDate : null) || new Date().toISOString().split('T')[0],
+          totalRaces: Math.max(races.length, isSameUser ? existingLocalUser.totalRaces || 0 : 0),
+          totalWins: Math.max(
+            races.filter((r) => r.finishPosition === 1).length,
+            isSameUser ? existingLocalUser.totalWins || 0 : 0
+          ),
+          avgWpm: races.length > 0 ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length) : (isSameUser ? existingLocalUser.avgWpm || 0 : 0),
+          bestWpm: Math.max(maxRaceWpm, isSameUser ? existingLocalUser.bestWpm || 0 : 0),
+          avgAccuracy: races.length > 0 ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10 : (isSameUser ? existingLocalUser.avgAccuracy || 100 : 100),
+          equippedCarId: (isSameUser ? existingLocalUser.equippedCarId : null) || 'car-apex-racer',
+          unlockedCars: Array.from(new Set(['car-apex-racer', ...(isSameUser ? existingLocalUser.unlockedCars || [] : [])])),
+          unlockedBadges: isSameUser && existingLocalUser.unlockedBadges.length > 0 ? existingLocalUser.unlockedBadges : ['ach-first-race'],
+          title: (isSameUser ? existingLocalUser.title : null) || 'Rookie Driver',
         };
 
         await setDoc(userRef, {
@@ -164,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastRaceDate: newProfile.lastRaceDate,
           totalRaces: newProfile.totalRaces,
           wins: newProfile.totalWins,
+          totalWins: newProfile.totalWins,
           avgWpm: newProfile.avgWpm,
           bestWpm: newProfile.bestWpm,
           avgAccuracy: newProfile.avgAccuracy,

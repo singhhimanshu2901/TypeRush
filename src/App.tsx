@@ -40,7 +40,11 @@ export function App() {
   }, [activeUser.equippedCarId]);
 
   const handleUserUpdate = async (updatedUser: User) => {
-    await ApiService.updateUserProfile(updatedUser);
+    try {
+      await ApiService.updateUserProfile(updatedUser);
+    } catch (err) {
+      console.error('[App] Failed to update user profile in Firestore:', err);
+    }
     setLocalUser(updatedUser);
     if (updatedUser.equippedCarId) {
       setRaceCarId(updatedUser.equippedCarId);
@@ -58,10 +62,15 @@ export function App() {
 
   const handleFinishRace = async (result: RaceResult) => {
     setLastResult(result);
-    const { user: updated } = await ApiService.saveRaceResult(result);
-    setLocalUser(updated);
-    await refreshProfile();
-    setActiveTab('result');
+    try {
+      const { user: updated } = await ApiService.saveRaceResult(result);
+      setLocalUser(updated);
+      await refreshProfile();
+    } catch (err) {
+      console.error('[App] Failed to save race result to Firestore:', err);
+    } finally {
+      setActiveTab('result');
+    }
   };
 
   return (

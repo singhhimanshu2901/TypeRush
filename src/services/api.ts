@@ -23,18 +23,21 @@ const STORAGE_KEYS = {
   CHALLENGES: 'typerush_challenges',
 };
 
-function handleFirestoreError(error: unknown, operationType: string, path: string | null) {
+export function handleFirestoreError(error: unknown, operationType: string, path: string | null) {
   const errInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
+      userId: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      emailVerified: auth.currentUser?.emailVerified || null,
+      isAnonymous: auth.currentUser?.isAnonymous || null,
     },
     operationType,
     path,
   };
-  console.error('Firestore Operation Error:', JSON.stringify(errInfo));
+  const errJson = JSON.stringify(errInfo);
+  console.error('Firestore Operation Error:', errJson);
+  throw new Error(errJson);
 }
 
 // Initial default fallback user for guest mode
@@ -92,11 +95,12 @@ export class ApiService {
           await updateProfile(currentUser, authUpdates);
         }
 
-        // 2. Update Firestore user doc with merge: true (preserves existing fields and complies with rules)
+        // 2. Update Firestore user doc with setDoc merge: true
         const userRef = doc(db, 'users', currentUser.uid);
         await setDoc(
           userRef,
           {
+            uid: currentUser.uid,
             displayName: updated.username,
             photoURL: updated.avatar,
             equippedCarId: updated.equippedCarId,
@@ -104,6 +108,7 @@ export class ApiService {
             unlockedBadges: updated.unlockedBadges,
             xp: updated.xp ?? 0,
             level: updated.level ?? 1,
+            title: updated.title ?? 'Rookie Driver',
             updatedAt: serverTimestamp(),
           },
           { merge: true }
@@ -131,7 +136,6 @@ export class ApiService {
         );
       } catch (err) {
         handleFirestoreError(err, 'update', `users/${currentUser.uid}`);
-        throw err;
       }
     }
 
@@ -168,11 +172,12 @@ export class ApiService {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        // 1. Reset Firestore user doc
+        // 1. Reset Firestore user doc using setDoc merge
         const userRef = doc(db, 'users', currentUser.uid);
         await setDoc(
           userRef,
           {
+            uid: currentUser.uid,
             level: 1,
             xp: 100,
             currentStreak: 0,
@@ -180,6 +185,7 @@ export class ApiService {
             lastRaceDate: null,
             totalRaces: 0,
             wins: 0,
+            totalWins: 0,
             avgWpm: 0,
             bestWpm: 0,
             avgAccuracy: 100,
@@ -221,7 +227,6 @@ export class ApiService {
         }
       } catch (err) {
         handleFirestoreError(err, 'reset', `users/${currentUser.uid}`);
-        throw err;
       }
     }
 
@@ -268,35 +273,8 @@ export class ApiService {
       return { user, newAchievements: [] };
     }
 
-    // Verify race result metrics via server endpoint first
-    try {
-      const verifyRes = await fetch('/api/races/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          totalChars: result.correctChars + result.incorrectChars,
-          correctChars: result.correctChars,
-          errors: result.incorrectChars,
-          durationSeconds: result.durationSeconds,
-          position: result.finishPosition,
-          difficulty: result.difficulty,
-        }),
-      });
-
-      if (verifyRes.ok) {
-        const verified = await verifyRes.json();
-        result.grossWpm = verified.grossWpm;
-        result.netWpm = verified.netWpm;
-        result.accuracy = verified.accuracy;
-        result.xpEarned = verified.verifiedXp;
-      }
-    } catch {
-      // Offline calculation fallback active
-    }
-
     // Calculate updated metrics
     races.unshift(result);
-    localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
 
     const totalRaces = races.length;
     const wins = races.filter((r) => r.finishPosition === 1).length;
@@ -429,8 +407,6 @@ export class ApiService {
       }
     });
 
-    localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(achievements));
-
     const finalLevel = Math.floor(newXp / 500) + 1;
 
     const updatedUser: User = {
@@ -450,28 +426,38 @@ export class ApiService {
       lastRaceDate: today,
     };
 
+    // Save to Local Storage Cache
+    localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
+    localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(achievements));
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updatedUser));
 
     // Write to Firestore if authenticated
     if (currentUser) {
       try {
         const userRef = doc(db, 'users', currentUser.uid);
-        await updateDoc(userRef, {
-          xp: newXp,
-          level: finalLevel,
-          totalRaces,
-          wins,
-          avgWpm,
-          bestWpm,
-          avgAccuracy: avgAcc,
-          unlockedCars,
-          unlockedBadges,
-          title,
-          currentStreak: streak,
-          longestStreak: Math.max(user.longestStreak, streak),
-          lastPlayedDate: today,
-          updatedAt: serverTimestamp(),
-        });
+        await setDoc(
+          userRef,
+          {
+            uid: currentUser.uid,
+            xp: newXp,
+            level: finalLevel,
+            totalRaces,
+            wins,
+            totalWins: wins,
+            avgWpm,
+            bestWpm,
+            avgAccuracy: avgAcc,
+            unlockedCars,
+            unlockedBadges,
+            title,
+            currentStreak: streak,
+            longestStreak: Math.max(user.longestStreak, streak),
+            lastRaceDate: today,
+            lastPlayedDate: today,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
 
         // Save race to subcollection using deterministic race ID
         const raceRef = doc(db, 'users', currentUser.uid, 'races', result.id);
@@ -482,20 +468,24 @@ export class ApiService {
 
         // Update public leaderboard document
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
-        await setDoc(lbRef, {
-          uid: currentUser.uid,
-          displayName: updatedUser.username,
-          avatar: updatedUser.avatar,
-          level: finalLevel,
-          title,
-          bestWpm,
-          avgAccuracy: avgAcc,
-          totalWins: wins,
-          totalRaces,
-          xp: newXp,
-          equippedCarId: updatedUser.equippedCarId,
-          updatedAt: serverTimestamp(),
-        });
+        await setDoc(
+          lbRef,
+          {
+            uid: currentUser.uid,
+            displayName: updatedUser.username,
+            avatar: updatedUser.avatar,
+            level: finalLevel,
+            title,
+            bestWpm,
+            avgAccuracy: avgAcc,
+            totalWins: wins,
+            totalRaces,
+            xp: newXp,
+            equippedCarId: updatedUser.equippedCarId,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       } catch (err) {
         handleFirestoreError(err, 'write', `users/${currentUser.uid}/races/${result.id}`);
       }
@@ -523,8 +513,7 @@ export class ApiService {
       const snap = await getDocs(racesSubcollRef);
 
       if (snap.empty) {
-        localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify([]));
-        return [];
+        return this.getRaces();
       }
 
       const races: RaceResult[] = [];
@@ -560,6 +549,16 @@ export class ApiService {
       });
 
       // Sort by date descending (most recent first)
+      races.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      // Merge with any local races that might not be in cloud yet
+      const localRaces = this.getRaces();
+      localRaces.forEach((lr) => {
+        if (!races.some((r) => r.id === lr.id)) {
+          races.push(lr);
+        }
+      });
+
       races.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
@@ -804,7 +803,7 @@ export class ApiService {
       return entries;
     } catch (err) {
       handleFirestoreError(err, 'list', 'leaderboards');
-      throw err;
+      return [];
     }
   }
 
