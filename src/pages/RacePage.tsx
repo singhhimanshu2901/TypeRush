@@ -3,9 +3,8 @@ import { User, RaceMode, Difficulty, Passage, RaceResult, AIRacer } from '../typ
 import { RaceTrackCanvas, ParticipantTrackData } from '../components/RaceTrackCanvas';
 import { TypingArea } from '../components/TypingArea';
 import { calculateGrossWpm, calculateNetWpm, calculateAccuracy, calculateXpEarned } from '../utils/typingEngine';
-import { ApiService } from '../services/api';
 import { CAR_MODELS, getCarById } from '../data/cars';
-import { Pause, Play, RotateCcw } from 'lucide-react';
+import { Pause, Play, RotateCcw, Trophy, Flag, ShieldAlert } from 'lucide-react';
 
 interface RacePageProps {
   user: User;
@@ -30,6 +29,7 @@ export const RacePage: React.FC<RacePageProps> = ({
   const [isRacing, setIsRacing] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [formattedTime, setFormattedTime] = useState<string>('0:00.0');
 
   // High precision timing and single-execution race finished guard
   const raceIdRef = useRef<string>(`race-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
@@ -141,7 +141,7 @@ export const RacePage: React.FC<RacePageProps> = ({
     }
   }, [countdown]);
 
-  // Main Race Game Loop Timer
+  // High Precision Game Loop Timer (100ms interval for smooth sub-second clock)
   useEffect(() => {
     if (!isRacing || isPaused || raceFinishedRef.current) return;
 
@@ -152,11 +152,18 @@ export const RacePage: React.FC<RacePageProps> = ({
       const currentSeconds = Math.max(1, Math.floor(elapsedMs / 1000));
       setElapsedTime(currentSeconds);
 
+      // High precision clock display (e.g., 0:01.7)
+      const totalSecs = elapsedMs / 1000;
+      const mins = Math.floor(totalSecs / 60);
+      const secs = Math.floor(totalSecs % 60);
+      const tenths = Math.floor((totalSecs % 1) * 10);
+      setFormattedTime(`${mins}:${secs.toString().padStart(2, '0')}.${tenths}`);
+
       // Recalculate live WPM
       const wpm = calculateNetWpm(correctCount, errorCount, currentSeconds);
       setUserWpm(wpm);
 
-      // Advance AI Opponents
+      // Advance AI Opponents in 100ms increments
       if (mode !== 'solo') {
         setAiRacers((prevBots) =>
           prevBots.map((bot) => {
@@ -164,7 +171,7 @@ export const RacePage: React.FC<RacePageProps> = ({
             const wpmShift = (Math.random() - 0.5) * 8;
             const currentBotSpeed = Math.max(10, bot.targetWpm + wpmShift);
             const charsPerSec = (currentBotSpeed * 5) / 60;
-            const newProgress = Math.min(1.0, bot.currentProgress + charsPerSec / totalCharsNeeded);
+            const newProgress = Math.min(1.0, bot.currentProgress + (charsPerSec * 0.1) / totalCharsNeeded);
 
             return {
               ...bot,
@@ -174,7 +181,7 @@ export const RacePage: React.FC<RacePageProps> = ({
           })
         );
       }
-    }, 1000);
+    }, 100);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -265,17 +272,6 @@ export const RacePage: React.FC<RacePageProps> = ({
   const activeCarId = carId || user.equippedCarId || 'car-apex-racer';
   const resolvedCar = getCarById(activeCarId);
 
-  useEffect(() => {
-    console.log('[TypeRush Race Initialization]', {
-      userEquippedCarId: user.equippedCarId,
-      propCarId: carId,
-      activeCarId,
-      resolvedCarName: resolvedCar.name,
-      resolvedCarCategory: resolvedCar.category,
-      resolvedCarId: resolvedCar.id,
-    });
-  }, [user.equippedCarId, carId, activeCarId, resolvedCar]);
-
   let allTrackParticipants: ParticipantTrackData[] = [
     {
       id: user.id,
@@ -307,10 +303,10 @@ export const RacePage: React.FC<RacePageProps> = ({
     position: index + 1,
   }));
 
-  const userParticipant = allTrackParticipants.find((p) => p.isUser);
+  const userRank = allTrackParticipants.find((p) => p.isUser)?.position || 1;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12 relative">
+    <div className="space-y-5 max-w-5xl mx-auto pb-12 relative">
       {/* 3-2-1 Countdown Overlay */}
       {countdown !== null && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center space-y-4">
@@ -346,27 +342,46 @@ export const RacePage: React.FC<RacePageProps> = ({
         </div>
       )}
 
-      {/* Race Top Controls */}
-      <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl min-w-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="font-extrabold text-sm text-white truncate max-w-[200px] md:max-w-xs">{passage.title}</span>
-          <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-bold text-xs uppercase border border-rose-500/20 shrink-0">
-            {difficulty}
-          </span>
+      {/* Top Arcade Racing Header HUD */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 px-5 py-3 rounded-2xl min-w-0 shadow-lg">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+            <Flag className="w-5 h-5 text-rose-500" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base text-white truncate">{passage.title}</span>
+              <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-bold text-[11px] uppercase border border-rose-500/20 shrink-0">
+                {difficulty}
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 font-medium truncate">
+              Vehicle: <span className="text-rose-400 font-semibold">{resolvedCar.name}</span> ({resolvedCar.category})
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* User Rank Indicator & Action Controls */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl font-mono text-xs">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span className="text-slate-400">RANK:</span>
+            <span className="text-amber-400 font-bold text-sm">
+              #{userRank} <span className="text-[10px] text-slate-500 font-sans">/ {allTrackParticipants.length}</span>
+            </span>
+          </div>
+
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5"
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-colors"
           >
-            {isPaused ? <Play className="w-4 h-4 fill-white" /> : <Pause className="w-4 h-4" />}
+            {isPaused ? <Play className="w-4 h-4 fill-white text-rose-500" /> : <Pause className="w-4 h-4" />}
             <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
 
           <button
             onClick={onCancelRace}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 font-bold text-xs"
+            className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 font-bold text-xs transition-colors"
           >
             Quit
           </button>
@@ -375,36 +390,6 @@ export const RacePage: React.FC<RacePageProps> = ({
 
       {/* Top 2D Track View */}
       <RaceTrackCanvas participants={allTrackParticipants} isRacing={isRacing && !isPaused} />
-
-      {/* TEMPORARY RUNTIME VEHICLE TELEMETRY DEBUG PANEL */}
-      <div className="bg-slate-950 border border-amber-500/40 rounded-2xl p-3.5 text-xs font-mono space-y-1 text-slate-300 shadow-xl">
-        <div className="text-[10px] font-black uppercase text-amber-400 flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-          Live Race Vehicle Telemetry Debugger
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 text-[11px]">
-          <div>
-            <span className="text-slate-500 block text-[9px] uppercase">User Equipped</span>
-            <span className="text-white font-bold truncate block">{user.equippedCarId || 'none'}</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] uppercase">Race Entity ID</span>
-            <span className="text-cyan-400 font-bold truncate block">{activeCarId}</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] uppercase">Resolved Vehicle</span>
-            <span className="text-rose-400 font-bold truncate block">{resolvedCar.name}</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] uppercase">Category / Body</span>
-            <span className="text-amber-300 font-bold truncate block">{resolvedCar.category} ({resolvedCar.geometry.roofline})</span>
-          </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] uppercase">Canvas Car ID</span>
-            <span className="text-emerald-400 font-bold truncate block">{userParticipant?.carId}</span>
-          </div>
-        </div>
-      </div>
 
       {/* Center Typing Interface */}
       <TypingArea
@@ -415,8 +400,10 @@ export const RacePage: React.FC<RacePageProps> = ({
         wpm={userWpm}
         accuracy={userAccuracy}
         elapsedTime={elapsedTime}
+        formattedTime={formattedTime}
         comboStreak={comboStreak}
       />
     </div>
   );
 };
+

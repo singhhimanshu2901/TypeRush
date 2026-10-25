@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Gauge, Target, RefreshCw, Zap, Volume2, VolumeX } from 'lucide-react';
+import { Gauge, Target, RefreshCw, Zap, Volume2, VolumeX, Timer } from 'lucide-react';
 
 interface TypingAreaProps {
   text: string;
@@ -9,6 +9,7 @@ interface TypingAreaProps {
   wpm: number;
   accuracy: number;
   elapsedTime: number;
+  formattedTime?: string;
   comboStreak: number;
 }
 
@@ -20,6 +21,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   wpm,
   accuracy,
   elapsedTime,
+  formattedTime,
   comboStreak,
 }) => {
   const [inputVal, setInputVal] = useState('');
@@ -27,6 +29,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const textContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeCharRef = useRef<HTMLSpanElement | null>(null);
 
   // Web Audio synth for key tick audio
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -63,6 +67,23 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
       inputRef.current.focus();
     }
   }, [isRacing]);
+
+  // Auto-scroll passage so current line remains centered
+  useEffect(() => {
+    if (activeCharRef.current && textContainerRef.current) {
+      const activeEl = activeCharRef.current;
+      const containerEl = textContainerRef.current;
+      const activeTop = activeEl.offsetTop;
+      const containerHeight = containerEl.clientHeight;
+
+      if (activeTop > containerHeight / 2) {
+        containerEl.scrollTo({
+          top: activeTop - containerHeight / 3,
+          behavior: 'smooth',
+        });
+      }
+    }
+  }, [inputVal.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isRacing) return;
@@ -120,48 +141,55 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
   const row2 = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'];
   const row3 = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
 
+  const displayTime = formattedTime || `${elapsedTime}s`;
+
   return (
     <div className="w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
       {/* Top Telemetry Meters Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {/* WPM Meter */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
+        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-500">
             <Gauge className="w-6 h-6 animate-pulse" />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">SPEED</div>
-            <div className="text-2xl font-black text-rose-500 tracking-tight">{wpm} <span className="text-xs font-semibold text-slate-400">WPM</span></div>
+            <div className="text-2xl font-black text-rose-500 tracking-tight font-mono">{wpm} <span className="text-xs font-semibold text-slate-400">WPM</span></div>
           </div>
         </div>
 
         {/* Accuracy Meter */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
+        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400">
             <Target className="w-6 h-6" />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ACCURACY</div>
-            <div className="text-2xl font-black text-cyan-400 tracking-tight">{accuracy}%</div>
+            <div className="text-2xl font-black text-cyan-400 tracking-tight font-mono">{accuracy}%</div>
           </div>
         </div>
 
         {/* Combo Nitro Streak */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
+        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
             <Zap className="w-6 h-6 fill-amber-400" />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">NITRO STREAK</div>
-            <div className="text-2xl font-black text-amber-400 tracking-tight">{comboStreak}x <span className="text-xs font-semibold text-slate-400">Streak</span></div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">NITRO BOOST</div>
+            <div className="text-2xl font-black text-amber-400 tracking-tight font-mono">{comboStreak}x <span className="text-xs font-semibold text-slate-400">Streak</span></div>
           </div>
         </div>
 
-        {/* Time Elapsed */}
-        <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RACE TIME</div>
-            <div className="text-2xl font-black text-slate-200 tracking-tight">{elapsedTime}s</div>
+        {/* High Precision Race Time */}
+        <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <Timer className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">RACE TIME</div>
+              <div className="text-2xl font-black text-emerald-400 tracking-tight font-mono">{displayTime}</div>
+            </div>
           </div>
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
@@ -175,13 +203,14 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
       {/* Text Passage Display Area */}
       <div
+        ref={textContainerRef}
         onClick={handleBoxClick}
-        className="cursor-text bg-slate-950/90 border-2 border-slate-800 hover:border-slate-700 rounded-2xl p-6 min-h-[160px] relative font-mono text-lg md:text-xl leading-relaxed tracking-wide select-none transition-all shadow-inner"
+        className="cursor-text bg-slate-950/90 border-2 border-slate-800 hover:border-slate-700 rounded-2xl p-6 max-h-[220px] overflow-y-auto relative font-mono text-lg md:text-xl leading-relaxed tracking-wide select-none transition-all shadow-inner custom-scrollbar"
       >
         {!isRacing && inputVal.length === 0 && (
           <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center z-10 rounded-2xl">
             <p className="text-slate-400 font-sans font-bold text-base flex items-center gap-2">
-              <RefreshCw className="w-5 h-5 animate-spin text-rose-500" /> Wait for 3-2-1 Countdown to Start Typing...
+              <RefreshCw className="w-5 h-5 animate-spin text-rose-500" /> Waiting for countdown to start typing...
             </p>
           </div>
         )}
@@ -189,7 +218,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
         <div className="flex flex-wrap items-center">
           {text.split('').map((char, index) => {
             let stateClass = 'text-slate-500';
-            let cursor = false;
+            const isCurrent = index === inputVal.length;
 
             if (index < inputVal.length) {
               if (inputVal[index] === char) {
@@ -197,13 +226,16 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
               } else {
                 stateClass = 'bg-rose-500/30 text-rose-400 font-bold underline underline-offset-4 rounded-xs';
               }
-            } else if (index === inputVal.length) {
-              cursor = true;
-              stateClass = 'text-slate-100 bg-rose-500/20 rounded-xs border-b-2 border-rose-500 animate-pulse';
+            } else if (isCurrent) {
+              stateClass = 'text-slate-100 bg-rose-500/25 rounded-xs border-b-2 border-rose-500 animate-pulse font-bold shadow-xs shadow-rose-500/50';
             }
 
             return (
-              <span key={index} className={`relative transition-colors ${stateClass}`}>
+              <span
+                key={index}
+                ref={isCurrent ? activeCharRef : null}
+                className={`relative inline-block transition-colors px-[1px] ${stateClass}`}
+              >
                 {char === ' ' ? '\u00A0' : char}
               </span>
             );
@@ -279,3 +311,4 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
     </div>
   );
 };
+
