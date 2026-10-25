@@ -36,6 +36,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sync or create Firestore profile for user
   const syncFirestoreProfile = async (fbUser: FirebaseUser) => {
     try {
+      // 1. Restore race history and telemetry subcollection from Cloud Firestore
+      const races = await ApiService.fetchUserRacesFromCloud(fbUser.uid);
+
       const userRef = doc(db, 'users', fbUser.uid);
       const snapshot = await getDoc(userRef);
 
@@ -46,9 +49,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (snapshot.exists()) {
         const data = snapshot.data();
-        const races = ApiService.getRaces();
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
         const computedBestWpm = Math.max(data.bestWpm || 0, maxRaceWpm);
+        const computedTotalRaces = Math.max(data.totalRaces || 0, races.length);
+        const computedWins = data.wins ?? data.totalWins ?? races.filter((r) => r.finishPosition === 1).length;
+        const computedAvgWpm = races.length > 0
+          ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
+          : (data.avgWpm || 0);
+        const computedAvgAcc = races.length > 0
+          ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
+          : (data.avgAccuracy || 100);
 
         const profile: User = {
           id: fbUser.uid,
@@ -59,12 +69,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           xp: data.xp || 0,
           currentStreak: data.currentStreak || 1,
           longestStreak: data.longestStreak || 1,
-          lastRaceDate: data.lastRaceDate || new Date().toISOString().split('T')[0],
-          totalRaces: Math.max(data.totalRaces || 0, races.length),
-          totalWins: data.wins ?? data.totalWins ?? 0,
-          avgWpm: data.avgWpm || 0,
+          lastRaceDate: data.lastRaceDate || data.lastPlayedDate || new Date().toISOString().split('T')[0],
+          totalRaces: computedTotalRaces,
+          totalWins: computedWins,
+          avgWpm: computedAvgWpm,
           bestWpm: computedBestWpm,
-          avgAccuracy: data.avgAccuracy || 100,
+          avgAccuracy: computedAvgAcc,
           equippedCarId: data.equippedCarId || 'car-apex-racer',
           unlockedCars: data.unlockedCars || ['car-apex-racer'],
           unlockedBadges: data.unlockedBadges || [],
@@ -76,11 +86,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('typerush_user', JSON.stringify(profile));
         }
 
-        // Sync back bestWpm if Firestore had 0
-        if ((data.bestWpm || 0) < computedBestWpm) {
+        // Sync back bestWpm if Firestore had lower values
+        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces) {
           await updateDoc(userRef, {
             bestWpm: computedBestWpm,
-            totalRaces: profile.totalRaces,
+            avgWpm: computedAvgWpm,
+            avgAccuracy: computedAvgAcc,
+            totalRaces: computedTotalRaces,
+            wins: computedWins,
             updatedAt: serverTimestamp(),
           });
         }
@@ -102,7 +115,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } else {
         // First-time user doc creation
-        const races = ApiService.getRaces();
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
 
         const newProfile: User = {
@@ -116,10 +128,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           longestStreak: 1,
           lastRaceDate: new Date().toISOString().split('T')[0],
           totalRaces: races.length,
-          totalWins: 0,
-          avgWpm: 0,
+          totalWins: races.filter((r) => r.finishPosition === 1).length,
+          avgWpm: races.length > 0 ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length) : 0,
           bestWpm: maxRaceWpm,
-          avgAccuracy: 100,
+          avgAccuracy: races.length > 0 ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10 : 100,
           equippedCarId: 'car-apex-racer',
           unlockedCars: ['car-apex-racer'],
           unlockedBadges: ['ach-first-race'],

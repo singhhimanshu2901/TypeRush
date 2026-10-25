@@ -507,7 +507,67 @@ export class ApiService {
   static getRaces(): RaceResult[] {
     const saved = localStorage.getItem(STORAGE_KEYS.RACES);
     if (!saved) return [];
-    return JSON.parse(saved);
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
+  }
+
+  // Restore race history and telemetry subcollection from Cloud Firestore for authenticated user
+  static async fetchUserRacesFromCloud(uid: string): Promise<RaceResult[]> {
+    if (!uid) return this.getRaces();
+
+    try {
+      const racesSubcollRef = collection(db, 'users', uid, 'races');
+      const snap = await getDocs(racesSubcollRef);
+
+      if (snap.empty) {
+        localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify([]));
+        return [];
+      }
+
+      const races: RaceResult[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        let dateStr = new Date().toISOString();
+        if (data.date) {
+          dateStr = data.date;
+        } else if (data.completedAt?.toDate) {
+          dateStr = data.completedAt.toDate().toISOString();
+        }
+
+        races.push({
+          id: data.id || docSnap.id,
+          userId: data.userId || uid,
+          username: data.username || 'Racer',
+          mode: data.mode || 'ai',
+          difficulty: data.difficulty || 'intermediate',
+          passageId: data.passageId || '',
+          passageTitle: data.passageTitle || 'Passage',
+          grossWpm: data.grossWpm ?? 0,
+          netWpm: data.netWpm ?? 0,
+          accuracy: data.accuracy ?? 100,
+          durationSeconds: data.durationSeconds ?? 0,
+          correctChars: data.correctChars ?? 0,
+          incorrectChars: data.incorrectChars ?? 0,
+          backspaces: data.backspaces ?? 0,
+          finishPosition: data.finishPosition ?? 1,
+          totalParticipants: data.totalParticipants ?? 4,
+          xpEarned: data.xpEarned ?? 0,
+          date: dateStr,
+        });
+      });
+
+      // Sort by date descending (most recent first)
+      races.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
+      return races;
+    } catch (err) {
+      handleFirestoreError(err, 'list', `users/${uid}/races`);
+      return this.getRaces();
+    }
   }
 
   static getAchievements(): Achievement[] {
