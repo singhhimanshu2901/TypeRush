@@ -6,7 +6,6 @@ import { db, auth } from '../config/firebase';
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -22,6 +21,20 @@ const STORAGE_KEYS = {
   ACHIEVEMENTS: 'typerush_achievements',
   CHALLENGES: 'typerush_challenges',
 };
+
+function handleFirestoreError(error: unknown, operationType: string, path: string | null) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+    },
+    operationType,
+    path,
+  };
+  console.error('Firestore Operation Error:', JSON.stringify(errInfo));
+}
 
 // Initial default fallback user for guest mode
 const DEFAULT_GUEST_USER: User = {
@@ -80,7 +93,7 @@ export class ApiService {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        console.warn('[ApiService] Firestore profile update fallback:', err);
+        handleFirestoreError(err, 'update', `users/${currentUser.uid}`);
       }
     }
 
@@ -90,6 +103,32 @@ export class ApiService {
   static async saveRaceResult(result: RaceResult): Promise<{ user: User; newAchievements: Achievement[] }> {
     const currentUser = auth.currentUser;
     let user = this.getUser();
+
+    // Verify race result metrics via server endpoint first
+    try {
+      const verifyRes = await fetch('/api/races/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalChars: result.correctChars + result.incorrectChars,
+          correctChars: result.correctChars,
+          errors: result.incorrectChars,
+          durationSeconds: result.durationSeconds,
+          position: result.finishPosition,
+          difficulty: result.difficulty,
+        }),
+      });
+
+      if (verifyRes.ok) {
+        const verified = await verifyRes.json();
+        result.grossWpm = verified.grossWpm;
+        result.netWpm = verified.netWpm;
+        result.accuracy = verified.accuracy;
+        result.xpEarned = verified.verifiedXp;
+      }
+    } catch {
+      // Offline calculation fallback active
+    }
 
     // Calculate updated metrics
     const races = this.getRaces();
@@ -177,7 +216,7 @@ export class ApiService {
           completedAt: serverTimestamp(),
         });
 
-        // Update public leaderboard document
+        // Update public leaderboard document (Excludes PII/Email)
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
         await setDoc(lbRef, {
           uid: currentUser.uid,
@@ -194,7 +233,7 @@ export class ApiService {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        console.warn('[ApiService] Error syncing race result to Firestore:', err);
+        handleFirestoreError(err, 'write', `users/${currentUser.uid}/races/${result.id}`);
       }
     }
 
@@ -288,7 +327,7 @@ export class ApiService {
 
       return entries;
     } catch (err) {
-      console.warn('[ApiService] Firestore leaderboard query error, using local fallback:', err);
+      handleFirestoreError(err, 'list', 'leaderboards');
       return this.getMockLeaderboard();
     }
   }
