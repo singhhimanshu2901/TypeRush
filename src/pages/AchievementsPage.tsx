@@ -11,7 +11,9 @@ export const AchievementsPage: React.FC<AchievementsPageProps> = ({ user }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'all' | 'unlocked' | 'locked'>('all');
 
-  const achievements = ApiService.getAchievements();
+  const achievements = React.useMemo(() => {
+    return ApiService.getAchievements(user);
+  }, [user]);
 
   const categories = [
     { id: 'all', label: 'All Badges' },

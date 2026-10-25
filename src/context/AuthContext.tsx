@@ -86,14 +86,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem('typerush_user', JSON.stringify(profile));
         }
 
-        // Sync back bestWpm if Firestore had lower values
-        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces) {
+        // Evaluate achievements dynamically from restored stats and race history
+        const evaluatedAchievements = ApiService.getAchievements(profile);
+        const resolvedUnlockedBadges = evaluatedAchievements.filter((a) => a.unlocked).map((a) => a.id);
+
+        if (resolvedUnlockedBadges.length > (profile.unlockedBadges?.length || 0)) {
+          profile.unlockedBadges = resolvedUnlockedBadges;
+          if (auth.currentUser?.uid === fbUser.uid) {
+            setUserProfile({ ...profile });
+            localStorage.setItem('typerush_user', JSON.stringify(profile));
+          }
+        }
+
+        // Sync back bestWpm and unlockedBadges if Firestore had lower values
+        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces || resolvedUnlockedBadges.length > (data.unlockedBadges?.length || 0)) {
           await updateDoc(userRef, {
             bestWpm: computedBestWpm,
             avgWpm: computedAvgWpm,
             avgAccuracy: computedAvgAcc,
             totalRaces: computedTotalRaces,
             wins: computedWins,
+            unlockedBadges: profile.unlockedBadges,
             updatedAt: serverTimestamp(),
           });
         }
