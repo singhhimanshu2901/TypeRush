@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ApiService } from '../services/api';
-import { Edit3, Save, X, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Edit3, Save, X, Loader2, CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
 import { UserAvatar } from '../components/UserAvatar';
 
@@ -17,6 +17,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  // Reset Stats Modal state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [confirmResetChecked, setConfirmResetChecked] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const races = ApiService.getRaces();
 
@@ -66,9 +72,35 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
       setIsEditing(false);
     } catch (err: unknown) {
       console.error('[ProfilePage] Error saving profile:', err);
-      setSaveError(err instanceof Error ? err.message : 'Failed to save profile. Please check your connection and try again.');
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to save profile. Please check your connection and try again.'
+      );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    if (!confirmResetChecked || isResetting) return;
+
+    setIsResetting(true);
+    setResetError(null);
+
+    try {
+      const resetUser = await ApiService.resetUserStats();
+      await onUserUpdate(resetUser);
+
+      setSaveSuccess('All driving statistics and race history have been successfully reset.');
+      setShowResetModal(false);
+    } catch (err: unknown) {
+      console.error('[ProfilePage] Error resetting stats:', err);
+      setResetError(
+        err instanceof Error ? err.message : 'Failed to reset statistics. Please try again.'
+      );
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -196,6 +228,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
       {/* WPM Chart */}
       <WpmChart races={races} />
 
+      {/* Settings / Danger Zone Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="font-extrabold text-base text-slate-200 flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-rose-500" /> Account Driving Statistics
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Reset competitive race records, XP, levels, achievements, and unlocked garage vehicles.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setConfirmResetChecked(false);
+              setResetError(null);
+              setShowResetModal(true);
+            }}
+            className="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all shrink-0"
+          >
+            <RotateCcw className="w-4 h-4 text-rose-400" /> Reset All Stats
+          </button>
+        </div>
+      </div>
+
       {/* Full Race Telemetry History */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
         <h3 className="font-extrabold text-base text-slate-200">Complete Track History</h3>
@@ -231,6 +287,97 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
           </div>
         )}
       </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl relative">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white">Reset Driving Statistics</h2>
+                  <p className="text-xs text-rose-400 font-bold uppercase tracking-wider">Permanent Action</p>
+                </div>
+              </div>
+              <button
+                disabled={isResetting}
+                onClick={() => setShowResetModal(false)}
+                className="text-slate-500 hover:text-white p-1 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-300 leading-relaxed bg-slate-950 p-4 rounded-2xl border border-slate-800">
+              <p className="font-bold text-slate-200">
+                Resetting statistics is separate from deleting your account:
+              </p>
+              <ul className="list-disc list-inside space-y-1.5 text-slate-400">
+                <li>Your Google login credentials, display name, and avatar remain active.</li>
+                <li>All race history records in Cloud Firestore and local storage will be cleared.</li>
+                <li>XP, Level 1, WPM records, accuracy, streaks, and unlocked badges will reset.</li>
+                <li>Unlocked garage vehicles will reset back to the starter vehicle.</li>
+                <li className="text-slate-300 font-semibold">
+                  Other drivers' records and global application data are never affected.
+                </li>
+              </ul>
+            </div>
+
+            {resetError && (
+              <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{resetError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+              <input
+                type="checkbox"
+                id="confirmReset"
+                disabled={isResetting}
+                checked={confirmResetChecked}
+                onChange={(e) => setConfirmResetChecked(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-rose-600 focus:ring-rose-500 cursor-pointer"
+              />
+              <label htmlFor="confirmReset" className="text-xs text-slate-300 font-medium cursor-pointer">
+                I understand that resetting my driving statistics cannot be undone.
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!confirmResetChecked || isResetting}
+                onClick={handleConfirmReset}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-2xl font-bold text-xs flex items-center gap-2 transition-all shadow-lg shadow-rose-600/30"
+              >
+                {isResetting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Resetting...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Confirm Reset</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,34 +1,78 @@
-import React from 'react';
-import { User, CarModel } from '../types';
+import React, { useState } from 'react';
+import { User } from '../types';
 import { CAR_MODELS } from '../data/cars';
 import { ApiService } from '../services/api';
-import { Zap, Gauge, Shield, CheckCircle, Lock } from 'lucide-react';
+import { Zap, CheckCircle, Lock, Shield, Sparkles } from 'lucide-react';
 
 interface GaragePageProps {
   user: User;
-  onUserUpdate: (updatedUser: User) => void;
+  onUserUpdate: (updatedUser: User) => Promise<void> | void;
 }
 
 export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) => {
+  const [selectedClass, setSelectedClass] = useState<string>('All');
+
+  const classes = ['All', 'Standard', 'Pro', 'Hyper', 'Legendary', 'Mythic'];
+
+  const filteredCars = CAR_MODELS.filter(
+    (car) => selectedClass === 'All' || car.speedClass === selectedClass
+  );
+
   const handleEquipCar = async (carId: string) => {
-    const updated = await ApiService.updateUserProfile({ equippedCarId: carId });
+    const isUnlocked =
+      user.unlockedCars.includes(carId) ||
+      (user.level >= (CAR_MODELS.find((c) => c.id === carId)?.unlockLevel || 1) &&
+        user.xp >= (CAR_MODELS.find((c) => c.id === carId)?.priceXp || 0));
+
+    if (!isUnlocked) return;
+
+    const newUnlockedCars = user.unlockedCars.includes(carId)
+      ? user.unlockedCars
+      : [...user.unlockedCars, carId];
+
+    const updated = await ApiService.updateUserProfile({
+      equippedCarId: carId,
+      unlockedCars: newUnlockedCars,
+    });
+
     await onUserUpdate(updated);
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12">
+    <div className="max-w-6xl mx-auto space-y-8 pb-12">
       {/* Title */}
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-black text-white flex items-center justify-center gap-3">
-          <Zap className="w-8 h-8 text-amber-400" /> DRIVER'S GARAGE
+          <Zap className="w-8 h-8 text-amber-400" /> DRIVER'S GARAGE & SHOWROOM
         </h1>
-        <p className="text-slate-400 text-sm font-medium">Customize and equip your high-performance racing vehicles.</p>
+        <p className="text-slate-400 text-sm font-medium">
+          Unlock and equip high-performance racing vehicles across 25 distinct models.
+        </p>
+      </div>
+
+      {/* Class Filter Tabs */}
+      <div className="flex flex-wrap justify-center gap-2">
+        {classes.map((cls) => (
+          <button
+            key={cls}
+            onClick={() => setSelectedClass(cls)}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+              selectedClass === cls
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30'
+                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            {cls}
+          </button>
+        ))}
       </div>
 
       {/* Car Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {CAR_MODELS.map((car) => {
-          const isUnlocked = user.unlockedCars.includes(car.id);
+        {filteredCars.map((car) => {
+          const isExplicitlyUnlocked = user.unlockedCars.includes(car.id);
+          const meetsRequirements = user.level >= car.unlockLevel && user.xp >= car.priceXp;
+          const isUnlocked = isExplicitlyUnlocked || meetsRequirements;
           const isEquipped = user.equippedCarId === car.id;
 
           return (
@@ -44,7 +88,19 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 uppercase">
+                  <span
+                    className={`text-xs font-black px-2.5 py-1 rounded-full uppercase ${
+                      car.speedClass === 'Mythic'
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                        : car.speedClass === 'Legendary'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : car.speedClass === 'Hyper'
+                        ? 'bg-rose-500/20 text-rose-300'
+                        : car.speedClass === 'Pro'
+                        ? 'bg-cyan-500/20 text-cyan-300'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
                     {car.speedClass} Class
                   </span>
                   {isEquipped ? (
@@ -53,16 +109,43 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
                     </span>
                   ) : !isUnlocked ? (
                     <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5" /> Unlocks L{car.unlockLevel}
+                      <Lock className="w-3.5 h-3.5" /> L{car.unlockLevel} &bull; {car.priceXp} XP
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" /> UNLOCKED
+                    </span>
+                  )}
                 </div>
 
-                {/* Car Preview Box */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl h-36 flex items-center justify-center relative overflow-hidden">
-                  <div className="text-6xl animate-pulse">🏎️</div>
+                {/* Car Preview Box with SVG Chassis */}
+                <div className="bg-slate-950 border border-slate-800 rounded-2xl h-36 flex items-center justify-center relative overflow-hidden group">
+                  <div className="relative w-40 h-20 flex items-center justify-center">
+                    {/* Visual Car Shell */}
+                    <div
+                      className="w-32 h-10 rounded-xl relative shadow-lg transition-transform group-hover:scale-105"
+                      style={{ backgroundColor: car.bodyColor }}
+                    >
+                      {/* Racing Stripe */}
+                      <div
+                        className="absolute inset-x-0 top-3 h-1.5"
+                        style={{ backgroundColor: car.stripeColor }}
+                      />
+                      {/* Cockpit Glass */}
+                      <div className="absolute top-1 left-8 w-12 h-4 rounded bg-slate-900 border border-slate-700/60 opacity-90" />
+                      {/* Side Accent */}
+                      <div
+                        className="absolute bottom-1 inset-x-3 h-1 rounded-full"
+                        style={{ backgroundColor: car.accentColor }}
+                      />
+                      {/* Wheels */}
+                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-900 rounded-full border-2 border-slate-600" />
+                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-900 rounded-full border-2 border-slate-600" />
+                    </div>
+                  </div>
+
                   <div
-                    className="absolute inset-x-0 bottom-0 h-1"
+                    className="absolute inset-x-0 bottom-0 h-1.5"
                     style={{ backgroundColor: car.bodyColor }}
                   />
                 </div>
@@ -80,8 +163,8 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
                   </div>
                   <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
                     <div
-                      className="bg-rose-500 h-full"
-                      style={{ width: `${(car.topSpeedMph / 220) * 100}%` }}
+                      className="bg-rose-500 h-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (car.topSpeedMph / 280) * 100)}%` }}
                     />
                   </div>
 
@@ -91,7 +174,7 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
                   </div>
                   <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden">
                     <div
-                      className="bg-cyan-400 h-full"
+                      className="bg-cyan-400 h-full transition-all duration-500"
                       style={{ width: `${car.accelerationStat}%` }}
                     />
                   </div>
@@ -114,7 +197,7 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
                   </button>
                 ) : (
                   <div className="text-center text-xs font-semibold text-slate-500 py-2">
-                    Reach Level {car.unlockLevel} to Unlock
+                    Requires Level {car.unlockLevel} &bull; {car.priceXp} XP
                   </div>
                 )}
               </div>

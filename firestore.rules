@@ -22,14 +22,15 @@ service cloud.firestore {
         request.resource.data.xp >= 0 &&
         request.resource.data.level >= 1;
 
-      // User Race Records (Immutable)
+      // User Race Records (Immutable updates, deletable on user stats reset)
       match /races/{raceId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) &&
           request.resource.data.netWpm >= 0 &&
           request.resource.data.accuracy >= 0 &&
           request.resource.data.accuracy <= 100;
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isOwner(uid);
       }
     }
 

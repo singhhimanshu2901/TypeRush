@@ -57,7 +57,7 @@ export interface RaceResult {
 export interface CarModel {
   id: string;
   name: string;
-  speedClass: 'Standard' | 'Pro' | 'Hyper' | 'Legendary';
+  speedClass: 'Standard' | 'Pro' | 'Hyper' | 'Legendary' | 'Mythic';
   priceXp: number;
   unlockLevel: number;
   bodyColor: string;
@@ -73,13 +73,15 @@ export interface Achievement {
   id: string;
   title: string;
   description: string;
-  category: 'speed' | 'accuracy' | 'wins' | 'streak' | 'races';
+  category: 'speed' | 'accuracy' | 'wins' | 'streak' | 'races' | 'consistency' | 'challenges';
+  rarity: 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
   targetValue: number;
   rewardXp: number;
   iconName: string;
   progress: number;
   unlocked: boolean;
   dateUnlocked?: string;
+  minCharsRequired?: number;
 }
 
 export interface LeaderboardEntry {

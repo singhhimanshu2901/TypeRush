@@ -9,7 +9,7 @@ import {
   doc,
   getDocs,
   setDoc,
-  updateDoc,
+  deleteDoc,
   query,
   orderBy,
   limit,
@@ -55,7 +55,7 @@ const DEFAULT_GUEST_USER: User = {
   avgAccuracy: 100,
   equippedCarId: 'car-apex-racer',
   unlockedCars: ['car-apex-racer'],
-  unlockedBadges: ['ach-first-race'],
+  unlockedBadges: [],
   title: 'Rookie Driver',
 };
 
@@ -100,6 +100,8 @@ export class ApiService {
             displayName: updated.username,
             photoURL: updated.avatar,
             equippedCarId: updated.equippedCarId,
+            unlockedCars: updated.unlockedCars,
+            unlockedBadges: updated.unlockedBadges,
             xp: updated.xp ?? 0,
             level: updated.level ?? 1,
             updatedAt: serverTimestamp(),
@@ -140,6 +142,106 @@ export class ApiService {
   // Alias for compatibility
   static async updateUser(updates: Partial<User>): Promise<User> {
     return this.updateUserProfile(updates);
+  }
+
+  // Reset Stats feature
+  static async resetUserStats(): Promise<User> {
+    const current = this.getUser();
+    const resetUser: User = {
+      ...current,
+      level: 1,
+      xp: 100,
+      currentStreak: 0,
+      longestStreak: 0,
+      lastRaceDate: null,
+      totalRaces: 0,
+      totalWins: 0,
+      avgWpm: 0,
+      bestWpm: 0,
+      avgAccuracy: 100,
+      equippedCarId: 'car-apex-racer',
+      unlockedCars: ['car-apex-racer'],
+      unlockedBadges: [],
+      title: 'Rookie Driver',
+    };
+
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        // 1. Reset Firestore user doc
+        const userRef = doc(db, 'users', currentUser.uid);
+        await setDoc(
+          userRef,
+          {
+            level: 1,
+            xp: 100,
+            currentStreak: 0,
+            longestStreak: 0,
+            lastRaceDate: null,
+            totalRaces: 0,
+            wins: 0,
+            avgWpm: 0,
+            bestWpm: 0,
+            avgAccuracy: 100,
+            equippedCarId: 'car-apex-racer',
+            unlockedCars: ['car-apex-racer'],
+            unlockedBadges: [],
+            title: 'Rookie Driver',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // 2. Reset public leaderboard doc
+        const lbRef = doc(db, 'leaderboards', currentUser.uid);
+        await setDoc(
+          lbRef,
+          {
+            uid: currentUser.uid,
+            displayName: resetUser.username,
+            avatar: resetUser.avatar,
+            level: 1,
+            title: 'Rookie Driver',
+            bestWpm: 0,
+            avgAccuracy: 100,
+            totalWins: 0,
+            totalRaces: 0,
+            xp: 100,
+            equippedCarId: 'car-apex-racer',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // 3. Clear user's race records in subcollection
+        const racesSubcollRef = collection(db, 'users', currentUser.uid, 'races');
+        const raceDocsSnap = await getDocs(racesSubcollRef);
+        if (!raceDocsSnap.empty) {
+          await Promise.all(raceDocsSnap.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+        }
+      } catch (err) {
+        handleFirestoreError(err, 'reset', `users/${currentUser.uid}`);
+        throw err;
+      }
+    }
+
+    // Reset Local Storage Caches
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(resetUser));
+    localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify([]));
+    localStorage.setItem(
+      STORAGE_KEYS.ACHIEVEMENTS,
+      JSON.stringify(
+        ACHIEVEMENTS_DATA.map((ach) => ({
+          ...ach,
+          progress: 0,
+          unlocked: false,
+          dateUnlocked: undefined,
+        }))
+      )
+    );
+    localStorage.setItem(STORAGE_KEYS.CHALLENGES, JSON.stringify(DAILY_CHALLENGES_DEFAULT));
+
+    return resetUser;
   }
 
   // Safely clear cached user data on logout
@@ -203,12 +305,12 @@ export class ApiService {
     const bestWpm = Math.max(user.bestWpm || 0, maxRaceWpm, result.netWpm || 0);
     const avgAcc = Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / totalRaces) * 10) / 10;
 
-    const newXp = user.xp + result.xpEarned;
+    let newXp = user.xp + result.xpEarned;
     const newLevel = Math.floor(newXp / 500) + 1;
 
     const unlockedCars = [...user.unlockedCars];
     CAR_MODELS.forEach((car) => {
-      if (newLevel >= car.unlockLevel && !unlockedCars.includes(car.id)) {
+      if (newLevel >= car.unlockLevel && newXp >= car.priceXp && !unlockedCars.includes(car.id)) {
         unlockedCars.push(car.id);
       }
     });
@@ -233,16 +335,64 @@ export class ApiService {
       }
     }
 
+    // Check Achievements
+    const achievements = this.getAchievements();
+    const newUnlocked: Achievement[] = [];
+    const unlockedBadges = [...user.unlockedBadges];
+
+    achievements.forEach((ach) => {
+      if (!ach.unlocked) {
+        let val = 0;
+        if (ach.category === 'races') {
+          val = totalRaces;
+        } else if (ach.category === 'speed') {
+          val = bestWpm;
+        } else if (ach.category === 'accuracy') {
+          const totalChars = (result.correctChars || 0) + (result.incorrectChars || 0);
+          if (!ach.minCharsRequired || totalChars >= ach.minCharsRequired) {
+            val = result.accuracy;
+          }
+        } else if (ach.category === 'wins') {
+          val = wins;
+        } else if (ach.category === 'streak') {
+          val = streak;
+        } else if (ach.category === 'consistency') {
+          const minAcc = ach.targetValue >= 25 ? 98 : 95;
+          val = races.filter((r) => r.accuracy >= minAcc).length;
+        } else if (ach.category === 'challenges') {
+          if (ach.id === 'ach-challenge-expert') {
+            val = result.difficulty === 'expert' && result.finishPosition === 1 ? 1 : 0;
+          }
+        }
+
+        ach.progress = Math.min(100, Math.round((val / ach.targetValue) * 100));
+        if (val >= ach.targetValue) {
+          ach.unlocked = true;
+          ach.dateUnlocked = new Date().toISOString();
+          newUnlocked.push(ach);
+          if (!unlockedBadges.includes(ach.id)) {
+            unlockedBadges.push(ach.id);
+            newXp += ach.rewardXp; // Award achievement reward XP exactly once
+          }
+        }
+      }
+    });
+
+    localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(achievements));
+
+    const finalLevel = Math.floor(newXp / 500) + 1;
+
     const updatedUser: User = {
       ...user,
       xp: newXp,
-      level: newLevel,
+      level: finalLevel,
       totalRaces,
       totalWins: wins,
       avgWpm,
       bestWpm,
       avgAccuracy: avgAcc,
       unlockedCars,
+      unlockedBadges,
       title,
       currentStreak: streak,
       longestStreak: Math.max(user.longestStreak, streak),
@@ -257,13 +407,14 @@ export class ApiService {
         const userRef = doc(db, 'users', currentUser.uid);
         await updateDoc(userRef, {
           xp: newXp,
-          level: newLevel,
+          level: finalLevel,
           totalRaces,
           wins,
           avgWpm,
           bestWpm,
           avgAccuracy: avgAcc,
           unlockedCars,
+          unlockedBadges,
           title,
           currentStreak: streak,
           longestStreak: Math.max(user.longestStreak, streak),
@@ -278,13 +429,13 @@ export class ApiService {
           completedAt: serverTimestamp(),
         });
 
-        // Update public leaderboard document (Excludes PII/Email)
+        // Update public leaderboard document
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
         await setDoc(lbRef, {
           uid: currentUser.uid,
           displayName: updatedUser.username,
           avatar: updatedUser.avatar,
-          level: newLevel,
+          level: finalLevel,
           title,
           bestWpm,
           avgAccuracy: avgAcc,
@@ -298,31 +449,6 @@ export class ApiService {
         handleFirestoreError(err, 'write', `users/${currentUser.uid}/races/${result.id}`);
       }
     }
-
-    // Check Achievements
-    const achievements = this.getAchievements();
-    const newUnlocked: Achievement[] = [];
-
-    achievements.forEach((ach) => {
-      if (!ach.unlocked) {
-        let val = 0;
-        if (ach.category === 'races') val = totalRaces;
-        else if (ach.category === 'speed') val = bestWpm;
-        else if (ach.category === 'accuracy') val = result.accuracy;
-        else if (ach.category === 'wins') val = wins;
-        else if (ach.category === 'streak') val = streak;
-
-        ach.progress = Math.min(100, Math.round((val / ach.targetValue) * 100));
-        if (val >= ach.targetValue) {
-          ach.unlocked = true;
-          ach.dateUnlocked = new Date().toISOString();
-          newUnlocked.push(ach);
-          updatedUser.unlockedBadges.push(ach.id);
-        }
-      }
-    });
-
-    localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(achievements));
 
     return { user: updatedUser, newAchievements: newUnlocked };
   }
@@ -351,7 +477,7 @@ export class ApiService {
     return JSON.parse(saved);
   }
 
-  // Synchronous Leaderboard getter for immediate render
+  // Synchronous Leaderboard getter for guest mode
   static getLeaderboard(): LeaderboardEntry[] {
     return this.getMockLeaderboard();
   }
@@ -363,7 +489,7 @@ export class ApiService {
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        return this.getMockLeaderboard();
+        return [];
       }
 
       const entries: LeaderboardEntry[] = [];
@@ -390,7 +516,7 @@ export class ApiService {
       return entries;
     } catch (err) {
       handleFirestoreError(err, 'list', 'leaderboards');
-      return this.getMockLeaderboard();
+      throw err;
     }
   }
 
