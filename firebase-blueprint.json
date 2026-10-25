@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account profile and gamification stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "totalRaces": { "type": "number" },
+        "wins": { "type": "number" },
+        "bestWpm": { "type": "number" },
+        "avgAccuracy": { "type": "number" },
+        "currentStreak": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "lastPlayedDate": { "type": "string", "maxLength": 30 },
+        "equippedCarId": { "type": "string", "maxLength": 50 },
+        "unlockedCars": { "type": "array" },
+        "unlockedBadges": { "type": "array" },
+        "title": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "RaceResult": {
+      "title": "Race Result",
+      "description": "Historical typing race telemetry result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 100 },
+        "mode": { "type": "string", "maxLength": 30 },
+        "difficulty": { "type": "string", "maxLength": 30 },
+        "passageId": { "type": "string", "maxLength": 50 },
+        "passageTitle": { "type": "string", "maxLength": 150 },
+        "grossWpm": { "type": "number" },
+        "netWpm": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "correctChars": { "type": "number" },
+        "incorrectChars": { "type": "number" },
+        "backspaces": { "type": "number" },
+        "finishPosition": { "type": "number" },
+        "totalParticipants": { "type": "number" },
+        "xpEarned": { "type": "number" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["userId", "netWpm", "accuracy", "completedAt"]
+    },
+    "MultiplayerRoom": {
+      "title": "Multiplayer Room",
+      "description": "Synchronized online multiplayer race lobby",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 50 },
+        "roomCode": { "type": "string", "maxLength": 20 },
+        "hostUid": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 30 },
+        "difficulty": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string" },
+        "lastActiveAt": { "type": "string" }
+      },
+      "required": ["roomCode", "hostUid", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile document containing private driver stats and progress"
+    },
+    "/users/{uid}/races/{raceId}": {
+      "schema": "RaceResult",
+      "description": "Subcollection of race results for a user"
+    },
+    "/leaderboards/{uid}": {
+      "schema": "User",
+      "description": "Public leaderboard records exposing public driver standings without private email"
+    },
+    "/multiplayerRooms/{roomCode}": {
+      "schema": "MultiplayerRoom",
+      "description": "Synchronized real-time multiplayer race room"
+    }
+  }
+}

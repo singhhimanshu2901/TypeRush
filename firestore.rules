@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profile documents (Private)
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Subcollection of user races
+      match /races/{raceId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Public Leaderboard records (Excludes PII/Email)
+    match /leaderboards/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && !('email' in request.resource.data);
+    }
+
+    // Multiplayer Rooms
+    match /multiplayerRooms/{roomCode} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow update: if isSignedIn() && request.resource.data.hostUid == resource.data.hostUid;
+      allow delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
+    }
+  }
+}

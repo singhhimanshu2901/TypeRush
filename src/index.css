@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #030712;
+    color: #f3f4f6;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 10px rgba(244, 63, 94, 0.6)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 20px rgba(244, 63, 94, 0.9)); }
+}
+
+@keyframes nitro-trail {
+  0% { transform: scaleX(0.2) translateX(0); opacity: 0.9; }
+  100% { transform: scaleX(1.5) translateX(-20px); opacity: 0; }
+}
+
+.animate-nitro {
+  animation: nitro-trail 0.5s ease-out infinite;
+}
+
+.animate-glow {
+  animation: pulse-glow 2s infinite;
+}
