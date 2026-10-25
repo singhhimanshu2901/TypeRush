@@ -3,7 +3,7 @@ import { CarModel } from '../types';
 
 interface CarGraphicProps {
   car: CarModel;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   showGlow?: boolean;
 }
@@ -15,76 +15,131 @@ export const CarGraphic: React.FC<CarGraphicProps> = ({
   showGlow = true,
 }) => {
   const dimensions = {
-    sm: { width: 110, height: 48 },
-    md: { width: 160, height: 70 },
-    lg: { width: 220, height: 95 },
+    sm: { width: 120, height: 55 },
+    md: { width: 180, height: 82 },
+    lg: { width: 250, height: 114 },
+    xl: { width: 340, height: 155 },
   }[size];
 
   const {
+    id,
     bodyColor,
     stripeColor,
     accentColor,
     headlightColor = '#fef08a',
     neonGlowColor = bodyColor,
-    bodyType,
-    wingStyle,
-    wheelStyle,
+    geometry,
     speedClass,
   } = car;
 
-  // Body Silhouette Paths based on bodyType
-  const getBodyPath = () => {
-    switch (bodyType) {
-      case 'hatchback':
-        return 'M 15 48 L 45 42 L 70 22 L 120 22 L 140 48 Z';
-      case 'sedan':
-        return 'M 15 48 L 48 40 L 68 24 L 105 24 L 125 40 L 145 40 L 145 48 Z';
-      case 'coupe':
-        return 'M 15 48 L 50 38 L 74 20 L 130 40 L 145 48 Z';
-      case 'muscle':
-        return 'M 10 48 L 12 36 L 55 36 L 75 18 L 115 18 L 148 48 Z';
-      case 'sports':
-        return 'M 10 48 L 46 32 L 72 18 L 120 22 L 150 48 Z';
-      case 'supercar':
-        return 'M 5 48 L 42 28 L 70 16 L 115 20 L 152 48 Z';
-      case 'hypercar':
-        return 'M 5 48 L 40 26 L 68 14 L 110 16 L 155 48 Z';
-      case 'formula':
-        return 'M 2 48 L 18 42 L 45 38 L 65 18 L 80 24 L 95 12 L 118 28 L 152 48 Z';
-      case 'cyberpunk':
-        return 'M 5 48 L 35 32 L 60 18 L 110 18 L 140 32 L 155 48 Z';
-      case 'jet':
-        return 'M 2 44 L 40 30 L 70 12 L 110 20 L 158 44 Z';
-      default:
-        return 'M 15 48 L 48 38 L 74 20 L 130 40 L 145 48 Z';
-    }
-  };
+  const {
+    bodyLength,
+    bodyHeight,
+    groundClearance,
+    hoodLength,
+    cabinPosition,
+    cabinLength,
+    cabinHeight,
+    windshieldAngle,
+    roofline,
+    fenderStyle,
+    headlightStyle,
+    grilleStyle,
+    frontBumperStyle,
+    sideIntakeStyle,
+    rearDiffuserStyle,
+    spoilerStyle,
+    roofAccessories,
+    wheelStyle,
+    frontWheelSize,
+    rearWheelSize,
+    wheelbase,
+    frontOverhang,
+    rearOverhang,
+    paintFinish,
+    windowTint,
+  } = geometry;
 
-  // Canopy Glass Path based on bodyType
-  const getCanopyPath = () => {
-    switch (bodyType) {
-      case 'hatchback':
-        return 'M 50 40 L 72 24 L 115 24 L 122 40 Z';
-      case 'sedan':
-        return 'M 50 38 L 69 26 L 102 26 L 120 38 Z';
-      case 'coupe':
-        return 'M 52 36 L 74 22 L 118 32 L 124 38 Z';
-      case 'muscle':
-        return 'M 58 34 L 76 20 L 110 20 L 122 34 Z';
-      case 'sports':
-        return 'M 48 30 L 72 20 L 112 24 L 125 32 Z';
-      case 'supercar':
-        return 'M 44 26 L 70 18 L 108 20 L 128 30 Z';
-      case 'hypercar':
-        return 'M 42 24 L 68 16 L 106 18 L 132 28 Z';
-      case 'formula':
-        return 'M 65 20 L 78 24 L 75 32 L 62 30 Z'; // Open cockpit driver helmet cutout
-      case 'cyberpunk':
-        return 'M 38 30 L 62 20 L 106 20 L 136 30 Z';
-      case 'jet':
-        return 'M 42 28 L 70 14 L 102 22 L 112 30 Z';
+  // Geometry Coordinate Mathematics for SVG Canvas (0 0 170 85)
+  const groundY = 66;
+  const wheelY = groundY - groundClearance;
+
+  const frontWheelX = 12 + frontOverhang;
+  const rearWheelX = Math.min(158, frontWheelX + wheelbase);
+
+  // Body Outline Keypoints
+  const frontNoseX = Math.max(4, frontWheelX - frontOverhang);
+  const frontNoseY = wheelY - bodyHeight * 0.38;
+
+  const hoodEndX = frontNoseX + hoodLength;
+  const hoodEndY = wheelY - bodyHeight * 0.48;
+
+  // Windshield angle offset
+  const windshieldSlope =
+    windshieldAngle === 'steep'
+      ? 8
+      : windshieldAngle === 'medium'
+      ? 14
+      : windshieldAngle === 'sloped'
+      ? 20
+      : windshieldAngle === 'bubble'
+      ? 16
+      : 28;
+
+  const roofStartX = hoodEndX + windshieldSlope;
+  const roofStartY = wheelY - bodyHeight;
+
+  const actualCabinLength = Math.min(
+    70,
+    cabinLength * (roofline === 'limo' ? 1.25 : roofline === 'teardrop' ? 1.1 : 1.0)
+  );
+
+  const roofEndX = roofStartX + actualCabinLength;
+  const roofEndY = roofStartY + (roofline === 'fastback' || roofline === 'teardrop' ? 4 : 0);
+
+  const rearDeckX = Math.min(166, roofEndX + (roofline === 'fastback' ? 22 : roofline === 'boxy' ? 6 : 14));
+  const rearTailX = Math.min(168, rearWheelX + rearOverhang);
+  const rearTailY = wheelY - bodyHeight * 0.42;
+
+  // Generate SVG Body Polygon Path
+  const bodyPath = `
+    M ${frontNoseX} ${frontNoseY}
+    L ${frontNoseX + 4} ${frontNoseY - 4}
+    L ${hoodEndX} ${hoodEndY}
+    L ${roofStartX} ${roofStartY}
+    L ${roofEndX} ${roofEndY}
+    L ${rearDeckX} ${roofEndY + (roofline === 'boxy' ? 12 : 18)}
+    L ${rearTailX} ${rearTailY}
+    L ${rearTailX} ${wheelY}
+    L ${rearWheelX + rearWheelSize + 3} ${wheelY}
+    A ${rearWheelSize + 3} ${rearWheelSize + 3} 0 0 0 ${rearWheelX - rearWheelSize - 3} ${wheelY}
+    L ${frontWheelX + frontWheelSize + 3} ${wheelY}
+    A ${frontWheelSize + 3} ${frontWheelSize + 3} 0 0 0 ${frontWheelX - frontWheelSize - 3} ${wheelY}
+    L ${frontNoseX} ${wheelY}
+    Z
+  `;
+
+  // Generate Glass Canopy Path
+  const glassPath = `
+    M ${hoodEndX + 2} ${hoodEndY - 1}
+    L ${roofStartX + 2} ${roofStartY + 2}
+    L ${roofEndX - 4} ${roofEndY + 2}
+    L ${roofEndX + (roofline === 'fastback' ? 14 : 6)} ${roofEndY + 12}
+    Z
+  `;
+
+  // Window Tint Color
+  const getGlassFill = () => {
+    switch (windowTint) {
+      case 'cyan_laser':
+        return 'url(#glass-cyan)';
+      case 'bronze':
+        return 'url(#glass-bronze)';
+      case 'silver_reflection':
+        return 'url(#glass-silver)';
+      case 'blackout':
       default:
-        return 'M 52 36 L 74 22 L 118 32 L 124 38 Z';
+        return 'url(#glass-blackout)';
     }
   };
 
@@ -93,180 +148,371 @@ export const CarGraphic: React.FC<CarGraphicProps> = ({
       <svg
         width={dimensions.width}
         height={dimensions.height}
-        viewBox="0 0 160 70"
+        viewBox="0 0 170 85"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className="overflow-visible"
       >
         <defs>
           {/* Neon Underglow Filter */}
-          <filter id={`neon-glow-${car.id}`} x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
+          <filter id={`neon-glow-${id}`} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="6" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
 
-          {/* Body Gradient */}
-          <linearGradient id={`body-grad-${car.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={bodyColor} />
-            <stop offset="100%" stopColor={accentColor} />
+          {/* Body Metallic Paint Gradient */}
+          <linearGradient id={`body-grad-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={bodyColor} stopOpacity="1" />
+            <stop offset="45%" stopColor={bodyColor} stopOpacity="1" />
+            <stop offset="70%" stopColor={accentColor} stopOpacity="0.9" />
+            <stop offset="100%" stopColor={bodyColor} stopOpacity="0.75" />
           </linearGradient>
 
-          {/* Canopy Tint */}
-          <linearGradient id={`canopy-grad-${car.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#0f172a" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#1e293b" stopOpacity="0.8" />
+          {/* Hood Metallic Highlight Strip */}
+          <linearGradient id={`hood-highlight-${id}`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
           </linearGradient>
+
+          {/* Window Tint Gradients */}
+          <linearGradient id="glass-blackout" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#020617" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#1e293b" stopOpacity="0.85" />
+          </linearGradient>
+          <linearGradient id="glass-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0891b2" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#020617" stopOpacity="0.9" />
+          </linearGradient>
+          <linearGradient id="glass-bronze" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#b45309" stopOpacity="0.75" />
+            <stop offset="100%" stopColor="#1e1b4b" stopOpacity="0.9" />
+          </linearGradient>
+          <linearGradient id="glass-silver" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#cbd5e1" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#090d16" stopOpacity="0.9" />
+          </linearGradient>
+
+          {/* Wheel Brake Caliper & Disc Gradient */}
+          <radialGradient id="disc-rotors" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="70%" stopColor="#475569" />
+            <stop offset="100%" stopColor="#0f172a" />
+          </radialGradient>
         </defs>
 
         {/* 1. NEON UNDERGLOW */}
         {showGlow && (
           <ellipse
-            cx="80"
-            cy="52"
-            rx="65"
-            ry="8"
+            cx="85"
+            cy={groundY + 2}
+            rx={bodyLength * 0.46}
+            ry="9"
             fill={neonGlowColor}
-            opacity="0.5"
-            filter={`url(#neon-glow-${car.id})`}
+            opacity="0.65"
+            filter={`url(#neon-glow-${id})`}
           />
         )}
 
-        {/* 2. BODY SHADOW */}
-        <ellipse cx="80" cy="53" rx="68" ry="6" fill="#020617" opacity="0.6" />
+        {/* 2. GROUND CONTACT DROP SHADOW */}
+        <ellipse cx="85" cy={groundY + 3} rx={bodyLength * 0.48} ry="5" fill="#020617" opacity="0.85" />
 
-        {/* 3. REAR EXHAUST JET FLAME (for Jet & Cyberpunk & Mythic/Legendary) */}
-        {(bodyType === 'jet' || speedClass === 'Mythic' || speedClass === 'Legendary') && (
-          <path
-            d="M 152 42 Q 165 44 152 46 Q 160 44 152 42 Z"
-            fill={accentColor}
-            className="animate-pulse"
-          />
+        {/* 3. HIGH SPEED EXHAUST FLAME TRAIL (For Mythic & Legendary) */}
+        {(speedClass === 'Mythic' || speedClass === 'Legendary') && (
+          <g>
+            <path
+              d={`M ${rearTailX + 2} ${rearTailY + 4} Q ${rearTailX + 18} ${rearTailY + 6} ${rearTailX + 2} ${rearTailY + 8} Z`}
+              fill={accentColor}
+              className="animate-pulse"
+            />
+            <circle cx={rearTailX + 12} cy={rearTailY + 6} r="2" fill="#ffffff" className="animate-ping" />
+          </g>
         )}
 
-        {/* 4. MAIN CAR BODY */}
-        <path d={getBodyPath()} fill={`url(#body-grad-${car.id})`} stroke="#020617" strokeWidth="1.5" />
+        {/* 4. MAIN CHASSIS BODY SHAPE */}
+        <path d={bodyPath} fill={`url(#body-grad-${id})`} stroke="#020617" strokeWidth="1.75" />
 
-        {/* 5. RACING STRIPE */}
+        {/* Metallic Upper Body Reflection Line */}
         <path
-          d={
-            bodyType === 'formula'
-              ? 'M 2 48 L 152 48 L 118 28 L 18 42 Z'
-              : 'M 10 48 Q 80 28 150 48'
-          }
-          stroke={stripeColor}
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          opacity="0.9"
+          d={`M ${frontNoseX + 6} ${frontNoseY - 2} L ${hoodEndX} ${hoodEndY} L ${roofStartX} ${roofStartY} L ${roofEndX} ${roofEndY}`}
+          stroke={`url(#hood-highlight-${id})`}
+          strokeWidth="2"
+          fill="none"
         />
 
-        {/* 6. COCKPIT / CANOPY GLASS */}
-        <path d={getCanopyPath()} fill={`url(#canopy-grad-${car.id})`} stroke={accentColor} strokeWidth="1" />
-
-        {/* 7. HEADLIGHTS & TAILLIGHTS */}
-        {/* Headlight Front Glow */}
-        <ellipse cx="12" cy="42" rx="3" ry="2" fill={headlightColor} />
-        {/* Taillight Red Glow */}
-        <ellipse cx="148" cy="42" rx="2.5" ry="2" fill="#ef4444" />
-
-        {/* 8. REAR WINGS / SPOILERS */}
-        {wingStyle === 'ducktail' && (
-          <path d="M 135 38 L 148 30 L 148 40 Z" fill={accentColor} />
-        )}
-        {wingStyle === 'spoiler' && (
-          <path d="M 130 32 L 148 32 L 148 35 L 132 35 Z M 134 35 L 134 40 M 144 35 L 144 40" stroke="#020617" strokeWidth="2" fill={accentColor} />
-        )}
-        {wingStyle === 'high_wing' && (
+        {/* 5. FENDER FLARES / WHEEL ARCH OVERLAYS */}
+        {fenderStyle === 'widebody' && (
           <g>
-            <path d="M 125 24 L 150 24 L 152 27 L 125 27 Z" fill="#020617" stroke={accentColor} strokeWidth="1" />
-            <line x1="130" y1="27" x2="132" y2="42" stroke="#020617" strokeWidth="2.5" />
-            <line x1="145" y1="27" x2="145" y2="42" stroke="#020617" strokeWidth="2.5" />
+            <path
+              d={`M ${frontWheelX - frontWheelSize - 6} ${wheelY + 2} Q ${frontWheelX} ${wheelY - frontWheelSize - 6} ${frontWheelX + frontWheelSize + 6} ${wheelY + 2}`}
+              stroke="#020617"
+              strokeWidth="2.5"
+              fill="none"
+            />
+            <path
+              d={`M ${rearWheelX - rearWheelSize - 6} ${wheelY + 2} Q ${rearWheelX} ${wheelY - rearWheelSize - 6} ${rearWheelX + rearWheelSize + 6} ${wheelY + 2}`}
+              stroke="#020617"
+              strokeWidth="2.5"
+              fill="none"
+            />
           </g>
         )}
-        {wingStyle === 'carbon_blade' && (
+        {fenderStyle === 'squared' && (
           <g>
-            <path d="M 120 20 L 152 20 L 154 23 L 122 23 Z" fill="#0f172a" stroke={stripeColor} strokeWidth="1" />
-            <path d="M 152 16 L 154 26 L 151 26 Z" fill={accentColor} />
-            <line x1="132" y1="23" x2="134" y2="40" stroke="#020617" strokeWidth="2" />
-          </g>
-        )}
-        {wingStyle === 'active_aero' && (
-          <g>
-            <path d="M 118 18 L 154 18 L 152 22 L 120 22 Z" fill={accentColor} />
-            <path d="M 122 23 L 150 23 L 148 26 L 124 26 Z" fill="#020617" />
-            <line x1="128" y1="26" x2="130" y2="40" stroke="#020617" strokeWidth="2" />
-          </g>
-        )}
-        {wingStyle === 'f1_wing' && (
-          <g>
-            <path d="M 115 14 L 156 14 L 154 18 L 118 18 Z" fill="#f59e0b" stroke="#020617" strokeWidth="1" />
-            <path d="M 118 19 L 152 19 L 150 22 L 120 22 Z" fill="#020617" />
-            <rect x="150" y="10" width="5" height="18" fill="#ef4444" rx="1" />
-            <line x1="130" y1="22" x2="132" y2="42" stroke="#020617" strokeWidth="3" />
-          </g>
-        )}
-        {wingStyle === 'plasma_wings' && (
-          <g>
-            <path d="M 110 12 L 158 12 L 152 18 L 115 18 Z" fill={neonGlowColor} opacity="0.9" />
-            <path d="M 115 18 L 150 18 L 146 22 L 120 22 Z" fill={accentColor} />
-            <circle cx="154" cy="15" r="3" fill="#ffffff" className="animate-ping" />
+            <path
+              d={`M ${frontWheelX - frontWheelSize - 5} ${wheelY + 2} L ${frontWheelX - frontWheelSize - 3} ${wheelY - frontWheelSize - 4} L ${frontWheelX + frontWheelSize + 3} ${wheelY - frontWheelSize - 4} L ${frontWheelX + frontWheelSize + 5} ${wheelY + 2}`}
+              stroke="#020617"
+              strokeWidth="2"
+              fill="none"
+            />
+            <path
+              d={`M ${rearWheelX - rearWheelSize - 5} ${wheelY + 2} L ${rearWheelX - rearWheelSize - 3} ${wheelY - rearWheelSize - 4} L ${rearWheelX + rearWheelSize + 3} ${wheelY - rearWheelSize - 4} L ${rearWheelX + rearWheelSize + 5} ${wheelY + 2}`}
+              stroke="#020617"
+              strokeWidth="2"
+              fill="none"
+            />
           </g>
         )}
 
-        {/* 9. WHEELS & RIMS */}
-        {/* Front Wheel */}
+        {/* 6. COCKPIT CANOPY GLASS & PILLARS */}
+        <path d={glassPath} fill={getGlassFill()} stroke={accentColor} strokeWidth="1" />
+        {/* B-Pillar Divider Line */}
+        <line
+          x1={(roofStartX + roofEndX) / 2}
+          y1={roofStartY + 2}
+          x2={(roofStartX + roofEndX) / 2 + 2}
+          y2={hoodEndY + 10}
+          stroke="#020617"
+          strokeWidth="1.5"
+        />
+
+        {/* 7. FRONT GRILLE & FASCIA DETAILS */}
+        {grilleStyle === 'vertical_chrome' && (
+          <g>
+            <rect x={frontNoseX + 2} y={frontNoseY} width="5" height="12" fill="#1e293b" stroke="#cbd5e1" strokeWidth="0.75" rx="1" />
+            <line x1={frontNoseX + 4} y1={frontNoseY + 1} x2={frontNoseX + 4} y2={frontNoseY + 11} stroke="#cbd5e1" strokeWidth="1" />
+          </g>
+        )}
+        {grilleStyle === 'dual_kidney' && (
+          <g>
+            <rect x={frontNoseX + 2} y={frontNoseY} width="4" height="5" fill="#020617" stroke="#38bdf8" strokeWidth="1" rx="1" />
+            <rect x={frontNoseX + 2} y={frontNoseY + 6} width="4" height="5" fill="#020617" stroke="#38bdf8" strokeWidth="1" rx="1" />
+          </g>
+        )}
+        {grilleStyle === 'mesh_hex' && (
+          <rect x={frontNoseX + 2} y={frontNoseY} width="6" height="10" fill="#020617" stroke="#475569" strokeWidth="1" rx="1" />
+        )}
+        {grilleStyle === 'enclosed_ev' && (
+          <rect x={frontNoseX + 2} y={frontNoseY + 2} width="4" height="8" fill="#0f172a" stroke={accentColor} strokeWidth="1.25" rx="1" />
+        )}
+
+        {/* Front Bumper Splitters & Canards */}
+        {frontBumperStyle === 'rugged_skid' && (
+          <rect x={frontNoseX - 2} y={wheelY - 4} width="8" height="4" fill="#475569" stroke="#020617" strokeWidth="1" rx="1" />
+        )}
+        {frontBumperStyle === 'splitter' && (
+          <path d={`M ${frontNoseX - 4} ${wheelY - 1} L ${frontNoseX + 12} ${wheelY - 1} L ${frontNoseX + 10} ${wheelY + 1} L ${frontNoseX - 4} ${wheelY + 1} Z`} fill="#0f172a" stroke={accentColor} strokeWidth="0.75" />
+        )}
+        {frontBumperStyle === 'canards' && (
+          <path d={`M ${frontNoseX} ${frontNoseY + 4} L ${frontNoseX - 5} ${frontNoseY + 2} L ${frontNoseX - 2} ${frontNoseY + 8} Z`} fill="#020617" />
+        )}
+
+        {/* 8. HEADLIGHTS SIGNATURE */}
+        {headlightStyle === 'vertical_led' && (
+          <rect x={frontNoseX + 2} y={frontNoseY - 2} width="2.5" height="10" fill={headlightColor} rx="1" />
+        )}
+        {headlightStyle === 'laser_strip' && (
+          <rect x={frontNoseX + 2} y={frontNoseY + 2} width="8" height="2" fill={headlightColor} rx="1" />
+        )}
+        {headlightStyle === 'quad_projector' && (
+          <g>
+            <circle cx={frontNoseX + 4} cy={frontNoseY + 2} r="1.5" fill={headlightColor} />
+            <circle cx={frontNoseX + 8} cy={frontNoseY + 2} r="1.5" fill={headlightColor} />
+          </g>
+        )}
+        {headlightStyle === 'dual_halo' && (
+          <g>
+            <circle cx={frontNoseX + 4} cy={frontNoseY + 4} r="2.5" fill="#020617" stroke={headlightColor} strokeWidth="1.5" />
+          </g>
+        )}
+        {headlightStyle === 'split_matrix' && (
+          <g>
+            <rect x={frontNoseX + 3} y={frontNoseY} width="4" height="2" fill={headlightColor} />
+            <rect x={frontNoseX + 3} y={frontNoseY + 4} width="4" height="2" fill={headlightColor} />
+          </g>
+        )}
+
+        {/* Taillights */}
+        <rect x={rearTailX - 2} y={rearTailY} width="3" height="8" fill="#ef4444" rx="1" />
+
+        {/* 9. SIDE INTAKES & GILLS */}
+        {sideIntakeStyle === 'gill' && (
+          <g stroke="#020617" strokeWidth="1">
+            <line x1={frontWheelX + 16} y1={wheelY - 12} x2={frontWheelX + 14} y2={wheelY - 4} />
+            <line x1={frontWheelX + 20} y1={wheelY - 12} x2={frontWheelX + 18} y2={wheelY - 4} />
+            <line x1={frontWheelX + 24} y1={wheelY - 12} x2={frontWheelX + 22} y2={wheelY - 4} />
+          </g>
+        )}
+        {sideIntakeStyle === 'massive_scoop' && (
+          <path d={`M ${rearWheelX - 28} ${wheelY - 14} L ${rearWheelX - 12} ${wheelY - 16} L ${rearWheelX - 14} ${wheelY - 4} L ${rearWheelX - 26} ${wheelY - 2} Z`} fill="#020617" stroke={accentColor} strokeWidth="1" />
+        )}
+        {sideIntakeStyle === 'tunnel' && (
+          <path d={`M ${rearWheelX - 32} ${wheelY - 16} L ${rearWheelX - 10} ${wheelY - 18} L ${rearWheelX - 12} ${wheelY - 2} Z`} fill="#090d16" stroke={stripeColor} strokeWidth="1" />
+        )}
+
+        {/* 10. ROOF ACCESSORIES */}
+        {roofAccessories === 'roof_rack' && (
+          <g>
+            <rect x={roofStartX + 4} y={roofStartY - 5} width={actualCabinLength - 8} height="3" fill="#1e293b" rx="1" />
+            <line x1={roofStartX + 10} y1={roofStartY - 2} x2={roofStartX + 10} y2={roofStartY} stroke="#020617" strokeWidth="2" />
+            <line x1={roofEndX - 10} y1={roofStartY - 2} x2={roofEndX - 10} y2={roofStartY} stroke="#020617" strokeWidth="2" />
+          </g>
+        )}
+        {roofAccessories === 'light_bar' && (
+          <g>
+            <rect x={roofStartX - 2} y={roofStartY - 5} width="16" height="4" fill="#0f172a" rx="1" />
+            <circle cx={roofStartX + 1} cy={roofStartY - 3} r="1.2" fill="#fef08a" />
+            <circle cx={roofStartX + 6} cy={roofStartY - 3} r="1.2" fill="#fef08a" />
+            <circle cx={roofStartX + 11} cy={roofStartY - 3} r="1.2" fill="#fef08a" />
+          </g>
+        )}
+        {roofAccessories === 'dorsal_fin' && (
+          <path d={`M ${roofStartX + 20} ${roofStartY - 1} L ${roofEndX + 10} ${roofStartY - 1} L ${roofEndX - 5} ${roofStartY + 8} Z`} fill={accentColor} stroke="#020617" strokeWidth="0.75" />
+        )}
+        {roofAccessories === 'roof_scoop' && (
+          <path d={`M ${roofStartX + 8} ${roofStartY - 4} L ${roofStartX + 22} ${roofStartY - 1} L ${roofStartX + 8} ${roofStartY} Z`} fill="#020617" stroke={accentColor} strokeWidth="1" />
+        )}
+
+        {/* 11. REAR SPOILERS & WINGS */}
+        {spoilerStyle === 'ducktail' && (
+          <path d={`M ${rearDeckX - 4} ${roofEndY + 12} L ${rearTailX} ${roofEndY + 2} L ${rearTailX} ${roofEndY + 12} Z`} fill={accentColor} />
+        )}
+        {spoilerStyle === 'spoiler' && (
+          <g>
+            <rect x={rearTailX - 16} y={rearTailY - 8} width="18" height="3" fill={accentColor} stroke="#020617" strokeWidth="0.75" rx="1" />
+            <line x1={rearTailX - 12} y1={rearTailY - 5} x2={rearTailX - 12} y2={rearTailY} stroke="#020617" strokeWidth="2" />
+            <line x1={rearTailX - 4} y1={rearTailY - 5} x2={rearTailX - 4} y2={rearTailY} stroke="#020617" strokeWidth="2" />
+          </g>
+        )}
+        {spoilerStyle === 'high_wing' && (
+          <g>
+            <path d={`M ${rearTailX - 22} ${rearTailY - 14} L ${rearTailX + 2} ${rearTailY - 14} L ${rearTailX + 4} ${rearTailY - 11} L ${rearTailX - 22} ${rearTailY - 11} Z`} fill="#0f172a" stroke={accentColor} strokeWidth="1" />
+            <line x1={rearTailX - 16} y1={rearTailY - 11} x2={rearTailX - 14} y2={rearTailY} stroke="#020617" strokeWidth="2.5" />
+            <line x1={rearTailX - 4} y1={rearTailY - 11} x2={rearTailX - 4} y2={rearTailY} stroke="#020617" strokeWidth="2.5" />
+          </g>
+        )}
+        {spoilerStyle === 'carbon_blade' && (
+          <g>
+            <path d={`M ${rearTailX - 26} ${rearTailY - 16} L ${rearTailX + 4} ${rearTailY - 16} L ${rearTailX + 6} ${rearTailY - 12} L ${rearTailX - 26} ${rearTailY - 12} Z`} fill="#090d16" stroke={stripeColor} strokeWidth="1" />
+            <path d={`M ${rearTailX + 4} ${rearTailY - 20} L ${rearTailX + 6} ${rearTailY - 8} L ${rearTailX + 2} ${rearTailY - 8} Z`} fill={accentColor} />
+            <line x1={rearTailX - 14} y1={rearTailY - 12} x2={rearTailX - 12} y2={rearTailY} stroke="#020617" strokeWidth="2.5" />
+          </g>
+        )}
+        {spoilerStyle === 'active_aero' && (
+          <g>
+            <path d={`M ${rearTailX - 24} ${rearTailY - 18} L ${rearTailX + 4} ${rearTailY - 18} L ${rearTailX + 2} ${rearTailY - 14} L ${rearTailX - 22} ${rearTailY - 14} Z`} fill={accentColor} stroke="#020617" strokeWidth="1" />
+            <line x1={rearTailX - 14} y1={rearTailY - 14} x2={rearTailX - 12} y2={rearTailY} stroke="#020617" strokeWidth="2.5" />
+          </g>
+        )}
+        {spoilerStyle === 'plasma_wings' && (
+          <g>
+            <path d={`M ${rearTailX - 30} ${rearTailY - 22} L ${rearTailX + 6} ${rearTailY - 22} L ${rearTailX + 2} ${rearTailY - 16} L ${rearTailX - 26} ${rearTailY - 16} Z`} fill={neonGlowColor} opacity="0.9" />
+            <line x1={rearTailX - 16} y1={rearTailY - 16} x2={rearTailX - 12} y2={rearTailY} stroke="#020617" strokeWidth="3" />
+            <circle cx={rearTailX + 4} cy={rearTailY - 19} r="3" fill="#ffffff" className="animate-ping" />
+          </g>
+        )}
+        {spoilerStyle === 'buttress' && (
+          <path d={`M ${roofEndX - 10} ${roofEndY + 4} L ${rearTailX - 2} ${rearTailY} L ${rearTailX - 8} ${rearTailY} Z`} fill={accentColor} opacity="0.85" />
+        )}
+
+        {/* 12. WHEELS & RIMS (Sized per vehicle geometry) */}
+        {/* FRONT WHEEL */}
         <g>
-          <circle cx="38" cy="48" r="10" fill="#090d16" stroke="#1e293b" strokeWidth="2" />
-          {wheelStyle === 'steel' && <circle cx="38" cy="48" r="5" fill="#475569" />}
-          {wheelStyle === 'alloy' && <circle cx="38" cy="48" r="6" fill="#cbd5e1" stroke="#020617" strokeWidth="1" />}
+          {/* Outer Tyre */}
+          <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize} fill="#090d16" stroke="#1e293b" strokeWidth="2.5" />
+          {/* Brake Rotor & Caliper */}
+          <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 3} fill="url(#disc-rotors)" />
+          <rect x={frontWheelX - frontWheelSize + 3} y={wheelY - 3} width="3" height="6" fill="#ef4444" rx="1" />
+
+          {/* Rim Style Rendering */}
+          {wheelStyle === 'offroad_chunky' && (
+            <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize} fill="none" stroke="#475569" strokeWidth="3.5" strokeDasharray="4 2" />
+          )}
+          {wheelStyle === 'steel' && <circle cx={frontWheelX} cy={wheelY} r="4.5" fill="#64748b" stroke="#020617" strokeWidth="1" />}
+          {wheelStyle === 'alloy' && (
+            <g>
+              <circle cx={frontWheelX} cy={wheelY} r="5.5" fill="#cbd5e1" stroke="#020617" strokeWidth="1" />
+              <circle cx={frontWheelX} cy={wheelY} r="2" fill="#020617" />
+            </g>
+          )}
           {wheelStyle === 'spoke' && (
             <g>
-              <circle cx="38" cy="48" r="6" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5" />
-              <line x1="38" y1="42" x2="38" y2="54" stroke="#cbd5e1" strokeWidth="1" />
-              <line x1="32" y1="48" x2="44" y2="48" stroke="#cbd5e1" strokeWidth="1" />
+              <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 3} fill="#020617" stroke="#38bdf8" strokeWidth="1" />
+              <line x1={frontWheelX - frontWheelSize + 4} y1={wheelY} x2={frontWheelX + frontWheelSize - 4} y2={wheelY} stroke="#cbd5e1" strokeWidth="1" />
+              <line x1={frontWheelX} y1={wheelY - frontWheelSize + 4} x2={frontWheelX} y2={wheelY + frontWheelSize - 4} stroke="#cbd5e1" strokeWidth="1" />
             </g>
           )}
           {wheelStyle === 'deep_dish' && (
-            <circle cx="38" cy="48" r="7" fill="#f8fafc" stroke="#64748b" strokeWidth="2" />
+            <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 2} fill="#f8fafc" stroke="#475569" strokeWidth="2.5" />
           )}
           {wheelStyle === 'neon_ring' && (
-            <circle cx="38" cy="48" r="7" fill="#020617" stroke={neonGlowColor} strokeWidth="2.5" />
+            <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 2.5} fill="#020617" stroke={neonGlowColor} strokeWidth="2.5" />
           )}
           {wheelStyle === 'gold_bbs' && (
-            <circle cx="38" cy="48" r="7" fill="#f59e0b" stroke="#020617" strokeWidth="1" />
+            <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 2.5} fill="#f59e0b" stroke="#020617" strokeWidth="1.5" />
+          )}
+          {wheelStyle === 'aerodisc' && (
+            <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 2} fill="#0f172a" stroke="#94a3b8" strokeWidth="2" />
           )}
           {wheelStyle === 'plasma_disc' && (
             <g>
-              <circle cx="38" cy="48" r="7.5" fill="#38bdf8" opacity="0.9" />
-              <circle cx="38" cy="48" r="3" fill="#ffffff" />
+              <circle cx={frontWheelX} cy={wheelY} r={frontWheelSize - 2} fill="#38bdf8" opacity="0.9" />
+              <circle cx={frontWheelX} cy={wheelY} r="2.5" fill="#ffffff" />
             </g>
           )}
         </g>
 
-        {/* Rear Wheel */}
+        {/* REAR WHEEL */}
         <g>
-          <circle cx="122" cy="48" r="10" fill="#090d16" stroke="#1e293b" strokeWidth="2" />
-          {wheelStyle === 'steel' && <circle cx="122" cy="48" r="5" fill="#475569" />}
-          {wheelStyle === 'alloy' && <circle cx="122" cy="48" r="6" fill="#cbd5e1" stroke="#020617" strokeWidth="1" />}
+          {/* Outer Tyre */}
+          <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize} fill="#090d16" stroke="#1e293b" strokeWidth="2.5" />
+          {/* Brake Rotor & Caliper */}
+          <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 3} fill="url(#disc-rotors)" />
+          <rect x={rearWheelX - rearWheelSize + 3} y={wheelY - 3} width="3" height="6" fill="#ef4444" rx="1" />
+
+          {/* Rim Style Rendering */}
+          {wheelStyle === 'offroad_chunky' && (
+            <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize} fill="none" stroke="#475569" strokeWidth="3.5" strokeDasharray="4 2" />
+          )}
+          {wheelStyle === 'steel' && <circle cx={rearWheelX} cy={wheelY} r="4.5" fill="#64748b" stroke="#020617" strokeWidth="1" />}
+          {wheelStyle === 'alloy' && (
+            <g>
+              <circle cx={rearWheelX} cy={wheelY} r="5.5" fill="#cbd5e1" stroke="#020617" strokeWidth="1" />
+              <circle cx={rearWheelX} cy={wheelY} r="2" fill="#020617" />
+            </g>
+          )}
           {wheelStyle === 'spoke' && (
             <g>
-              <circle cx="122" cy="48" r="6" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5" />
-              <line x1="122" y1="42" x2="122" y2="54" stroke="#cbd5e1" strokeWidth="1" />
-              <line x1="116" y1="48" x2="128" y2="48" stroke="#cbd5e1" strokeWidth="1" />
+              <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 3} fill="#020617" stroke="#38bdf8" strokeWidth="1" />
+              <line x1={rearWheelX - rearWheelSize + 4} y1={wheelY} x2={rearWheelX + rearWheelSize - 4} y2={wheelY} stroke="#cbd5e1" strokeWidth="1" />
+              <line x1={rearWheelX} y1={wheelY - rearWheelSize + 4} x2={rearWheelX} y2={wheelY + rearWheelSize - 4} stroke="#cbd5e1" strokeWidth="1" />
             </g>
           )}
           {wheelStyle === 'deep_dish' && (
-            <circle cx="122" cy="48" r="7" fill="#f8fafc" stroke="#64748b" strokeWidth="2" />
+            <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 2} fill="#f8fafc" stroke="#475569" strokeWidth="2.5" />
           )}
           {wheelStyle === 'neon_ring' && (
-            <circle cx="122" cy="48" r="7" fill="#020617" stroke={neonGlowColor} strokeWidth="2.5" />
+            <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 2.5} fill="#020617" stroke={neonGlowColor} strokeWidth="2.5" />
           )}
           {wheelStyle === 'gold_bbs' && (
-            <circle cx="122" cy="48" r="7" fill="#f59e0b" stroke="#020617" strokeWidth="1" />
+            <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 2.5} fill="#f59e0b" stroke="#020617" strokeWidth="1.5" />
+          )}
+          {wheelStyle === 'aerodisc' && (
+            <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 2} fill="#0f172a" stroke="#94a3b8" strokeWidth="2" />
           )}
           {wheelStyle === 'plasma_disc' && (
             <g>
-              <circle cx="122" cy="48" r="7.5" fill="#38bdf8" opacity="0.9" />
-              <circle cx="122" cy="48" r="3" fill="#ffffff" />
+              <circle cx={rearWheelX} cy={wheelY} r={rearWheelSize - 2} fill="#38bdf8" opacity="0.9" />
+              <circle cx={rearWheelX} cy={wheelY} r="2.5" fill="#ffffff" />
             </g>
           )}
         </g>

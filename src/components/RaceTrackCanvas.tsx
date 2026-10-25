@@ -111,7 +111,7 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
       ctx.fillText('FINISH LINE', finishX + 10, 16);
 
       // Render Particles (Exhaust & Finish sparks)
-      particlesRef.current.forEach((p, idx) => {
+      particlesRef.current.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
         p.alpha -= 0.02;
@@ -135,6 +135,7 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
         const currentCarX = startX + Math.min(1.0, Math.max(0, p.progress)) * trackLength;
 
         const carModel = CAR_MODELS.find((c) => c.id === p.carId) || CAR_MODELS[0];
+        const geom = carModel.geometry;
         const carColor = p.isUser ? '#f43f5e' : p.color || carModel.bodyColor;
 
         // Spawn exhaust particles if moving fast
@@ -189,53 +190,55 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
         ctx.ellipse(currentCarX, laneCenterY + 12, 24, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Car Body Geometry based on bodyType
+        // Car Body Geometry derived from CarGeometry properties
+        const carHalfWidth = geom.bodyLength * 0.16; // 22 - 26px
+        const carHalfHeight = Math.max(9, geom.bodyHeight * 0.35); // 9 - 14px
+
         ctx.fillStyle = carColor;
         ctx.beginPath();
-        if (carModel.bodyType === 'formula') {
-          // Open wheel formula nose & cockpit
-          ctx.moveTo(currentCarX + 26, laneCenterY);
-          ctx.lineTo(currentCarX + 12, laneCenterY - 6);
-          ctx.lineTo(currentCarX - 18, laneCenterY - 8);
-          ctx.lineTo(currentCarX - 24, laneCenterY - 11);
-          ctx.lineTo(currentCarX - 24, laneCenterY + 11);
-          ctx.lineTo(currentCarX - 18, laneCenterY + 8);
-          ctx.lineTo(currentCarX + 12, laneCenterY + 6);
-          ctx.closePath();
-        } else if (carModel.bodyType === 'jet') {
-          // Needle jet nose
-          ctx.moveTo(currentCarX + 30, laneCenterY);
-          ctx.lineTo(currentCarX + 10, laneCenterY - 10);
-          ctx.lineTo(currentCarX - 24, laneCenterY - 11);
-          ctx.lineTo(currentCarX - 24, laneCenterY + 11);
-          ctx.lineTo(currentCarX + 10, laneCenterY + 10);
-          ctx.closePath();
-        } else if (carModel.bodyType === 'cyberpunk') {
-          // Polygon stealth lines
-          ctx.moveTo(currentCarX + 24, laneCenterY - 4);
-          ctx.lineTo(currentCarX + 18, laneCenterY - 11);
-          ctx.lineTo(currentCarX - 20, laneCenterY - 11);
-          ctx.lineTo(currentCarX - 24, laneCenterY - 6);
-          ctx.lineTo(currentCarX - 24, laneCenterY + 6);
-          ctx.lineTo(currentCarX - 20, laneCenterY + 11);
-          ctx.lineTo(currentCarX + 18, laneCenterY + 11);
-          ctx.lineTo(currentCarX + 24, laneCenterY + 4);
+        if (carModel.category === 'SUV') {
+          // Boxy wide SUV profile
+          ctx.roundRect(currentCarX - carHalfWidth, laneCenterY - carHalfHeight - 2, carHalfWidth * 2, carHalfHeight * 2 + 4, [4, 8, 8, 4]);
+        } else if (carModel.category === 'Luxury') {
+          // Long executive saloon body
+          ctx.roundRect(currentCarX - carHalfWidth - 2, laneCenterY - carHalfHeight, carHalfWidth * 2 + 4, carHalfHeight * 2, [6, 10, 10, 6]);
+        } else if (geom.roofline === 'extreme_wedge' || geom.roofline === 'teardrop') {
+          // Polygon wedge hypercar / supercar
+          ctx.moveTo(currentCarX + carHalfWidth + 2, laneCenterY - 3);
+          ctx.lineTo(currentCarX + carHalfWidth - 4, laneCenterY - carHalfHeight);
+          ctx.lineTo(currentCarX - carHalfWidth + 4, laneCenterY - carHalfHeight);
+          ctx.lineTo(currentCarX - carHalfWidth - 2, laneCenterY - 4);
+          ctx.lineTo(currentCarX - carHalfWidth - 2, laneCenterY + 4);
+          ctx.lineTo(currentCarX - carHalfWidth + 4, laneCenterY + carHalfHeight);
+          ctx.lineTo(currentCarX + carHalfWidth - 4, laneCenterY + carHalfHeight);
+          ctx.lineTo(currentCarX + carHalfWidth + 2, laneCenterY + 3);
           ctx.closePath();
         } else {
-          // Standard / Sports / Supercar roundRect chassis
-          ctx.roundRect(currentCarX - 24, laneCenterY - 11, 48, 22, [5, 12, 12, 5]);
+          // Standard / Sports roundRect chassis
+          ctx.roundRect(currentCarX - carHalfWidth, laneCenterY - carHalfHeight, carHalfWidth * 2, carHalfHeight * 2, [5, 12, 12, 5]);
         }
         ctx.fill();
 
         // Racing Stripe
         ctx.fillStyle = carModel.stripeColor || '#ffffff';
-        ctx.fillRect(currentCarX - 24, laneCenterY - 1.5, 48, 3);
+        ctx.fillRect(currentCarX - carHalfWidth, laneCenterY - 1.5, carHalfWidth * 2, 3);
+
+        // Roof accessories / Dorsal fin
+        if (geom.roofAccessories === 'dorsal_fin') {
+          ctx.fillStyle = carModel.accentColor || '#f59e0b';
+          ctx.beginPath();
+          ctx.moveTo(currentCarX - 8, laneCenterY - 1.5);
+          ctx.lineTo(currentCarX - 24, laneCenterY - 1.5);
+          ctx.lineTo(currentCarX - 18, laneCenterY - 12);
+          ctx.closePath();
+          ctx.fill();
+        }
 
         // Cockpit Glass
         ctx.fillStyle = '#0f172a';
         ctx.beginPath();
-        if (carModel.bodyType === 'formula') {
-          ctx.arc(currentCarX - 2, laneCenterY, 5, 0, Math.PI * 2);
+        if (carModel.category === 'SUV') {
+          ctx.roundRect(currentCarX - 8, laneCenterY - 8, 20, 16, 2);
         } else {
           ctx.roundRect(currentCarX - 6, laneCenterY - 7, 18, 14, 3);
         }
@@ -243,38 +246,40 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
 
         // Front Headlights
         ctx.fillStyle = carModel.headlightColor || '#fef08a';
-        ctx.fillRect(currentCarX + 20, laneCenterY - 9, 3, 4);
-        ctx.fillRect(currentCarX + 20, laneCenterY + 5, 3, 4);
+        ctx.fillRect(currentCarX + carHalfWidth - 3, laneCenterY - carHalfHeight + 2, 3, 4);
+        ctx.fillRect(currentCarX + carHalfWidth - 3, laneCenterY + carHalfHeight - 6, 3, 4);
 
         // Rear Wing / Spoiler
-        if (carModel.wingStyle && carModel.wingStyle !== 'none') {
+        if (geom.spoilerStyle && geom.spoilerStyle !== 'none') {
           ctx.fillStyle = carModel.accentColor || '#f59e0b';
-          if (carModel.wingStyle === 'f1_wing' || carModel.wingStyle === 'plasma_wings') {
-            ctx.fillRect(currentCarX - 28, laneCenterY - 14, 6, 28);
+          if (geom.spoilerStyle === 'plasma_wings' || geom.spoilerStyle === 'high_wing' || geom.spoilerStyle === 'f1_wing') {
+            ctx.fillRect(currentCarX - carHalfWidth - 4, laneCenterY - carHalfHeight - 3, 5, carHalfHeight * 2 + 6);
           } else {
-            ctx.fillRect(currentCarX - 26, laneCenterY - 12, 4, 24);
+            ctx.fillRect(currentCarX - carHalfWidth - 2, laneCenterY - carHalfHeight, 4, carHalfHeight * 2);
           }
         }
 
         // Wheels
         const rimColor =
-          carModel.wheelStyle === 'gold_bbs'
+          geom.wheelStyle === 'gold_bbs'
             ? '#f59e0b'
-            : carModel.wheelStyle === 'neon_ring' || carModel.wheelStyle === 'plasma_disc'
+            : geom.wheelStyle === 'neon_ring' || geom.wheelStyle === 'plasma_disc'
             ? carModel.accentColor || '#38bdf8'
+            : geom.wheelStyle === 'offroad_chunky'
+            ? '#475569'
             : '#64748b';
 
         ctx.fillStyle = '#090d16';
-        ctx.fillRect(currentCarX - 18, laneCenterY - 14, 11, 4);
-        ctx.fillRect(currentCarX + 8, laneCenterY - 14, 11, 4);
-        ctx.fillRect(currentCarX - 18, laneCenterY + 10, 11, 4);
-        ctx.fillRect(currentCarX + 8, laneCenterY + 10, 11, 4);
+        ctx.fillRect(currentCarX - 18, laneCenterY - carHalfHeight - 3, 11, 4);
+        ctx.fillRect(currentCarX + 8, laneCenterY - carHalfHeight - 3, 11, 4);
+        ctx.fillRect(currentCarX - 18, laneCenterY + carHalfHeight - 1, 11, 4);
+        ctx.fillRect(currentCarX + 8, laneCenterY + carHalfHeight - 1, 11, 4);
 
         ctx.fillStyle = rimColor;
-        ctx.fillRect(currentCarX - 16, laneCenterY - 13, 7, 2);
-        ctx.fillRect(currentCarX + 10, laneCenterY - 13, 7, 2);
-        ctx.fillRect(currentCarX - 16, laneCenterY + 11, 7, 2);
-        ctx.fillRect(currentCarX + 10, laneCenterY + 11, 7, 2);
+        ctx.fillRect(currentCarX - 16, laneCenterY - carHalfHeight - 2, 7, 2);
+        ctx.fillRect(currentCarX + 10, laneCenterY - carHalfHeight - 2, 7, 2);
+        ctx.fillRect(currentCarX - 16, laneCenterY + carHalfHeight, 7, 2);
+        ctx.fillRect(currentCarX + 10, laneCenterY + carHalfHeight, 7, 2);
 
         // Position Badge (#1, #2, etc.)
         const posColor =
