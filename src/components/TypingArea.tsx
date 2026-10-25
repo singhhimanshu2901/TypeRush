@@ -26,7 +26,6 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 }) => {
   const [inputVal, setInputVal] = useState('');
   const [backspaceCount, setBackspaceCount] = useState(0);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const textContainerRef = useRef<HTMLDivElement | null>(null);
@@ -87,8 +86,6 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isRacing) return;
-    setActiveKey(e.key.toUpperCase());
-    setTimeout(() => setActiveKey(null), 150);
 
     if (e.key === 'Backspace') {
       setBackspaceCount((prev) => prev + 1);
@@ -135,11 +132,6 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
       inputRef.current.focus();
     }
   };
-
-  // Keyboard Rows for virtual display
-  const row1 = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'];
-  const row2 = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'];
-  const row3 = ['Z', 'X', 'C', 'V', 'B', 'N', 'M'];
 
   const displayTime = formattedTime || `${elapsedTime}s`;
 
@@ -258,57 +250,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
           spellCheck="false"
         />
       </div>
-
-      {/* Virtual Keyboard Key press visualizer */}
-      <div className="mt-6 hidden lg:block bg-slate-950/40 p-4 rounded-2xl border border-slate-800/80">
-        <div className="flex flex-col items-center gap-1.5 text-xs font-mono font-bold text-slate-400">
-          <div className="flex gap-1.5">
-            {row1.map((key) => (
-              <div
-                key={key}
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all ${
-                  activeKey === key
-                    ? 'bg-rose-600 border-rose-400 text-white scale-110 shadow-lg shadow-rose-600/50'
-                    : 'bg-slate-900 border-slate-800 text-slate-500'
-                }`}
-              >
-                {key}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex gap-1.5">
-            {row2.map((key) => (
-              <div
-                key={key}
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all ${
-                  activeKey === key
-                    ? 'bg-rose-600 border-rose-400 text-white scale-110 shadow-lg shadow-rose-600/50'
-                    : 'bg-slate-900 border-slate-800 text-slate-500'
-                }`}
-              >
-                {key}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex gap-1.5">
-            {row3.map((key) => (
-              <div
-                key={key}
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all ${
-                  activeKey === key
-                    ? 'bg-rose-600 border-rose-400 text-white scale-110 shadow-lg shadow-rose-600/50'
-                    : 'bg-slate-900 border-slate-800 text-slate-500'
-                }`}
-              >
-                {key}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
+
 
