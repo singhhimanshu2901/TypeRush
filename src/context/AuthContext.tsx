@@ -90,23 +90,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const evaluatedAchievements = ApiService.getAchievements(profile);
         const resolvedUnlockedBadges = evaluatedAchievements.filter((a) => a.unlocked).map((a) => a.id);
 
-        if (resolvedUnlockedBadges.length > (profile.unlockedBadges?.length || 0)) {
-          profile.unlockedBadges = resolvedUnlockedBadges;
-          if (auth.currentUser?.uid === fbUser.uid) {
-            setUserProfile({ ...profile });
-            localStorage.setItem('typerush_user', JSON.stringify(profile));
-          }
+        profile.unlockedBadges = resolvedUnlockedBadges;
+        if (auth.currentUser?.uid === fbUser.uid) {
+          setUserProfile({ ...profile });
+          localStorage.setItem('typerush_user', JSON.stringify(profile));
         }
 
-        // Sync back bestWpm and unlockedBadges if Firestore had lower values
-        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces || resolvedUnlockedBadges.length > (data.unlockedBadges?.length || 0)) {
+        // Sync back bestWpm and reconciled unlockedBadges if Firestore differs
+        const currentBadgesJson = JSON.stringify(data.unlockedBadges || []);
+        const resolvedBadgesJson = JSON.stringify(resolvedUnlockedBadges);
+
+        if ((data.bestWpm || 0) < computedBestWpm || (data.totalRaces || 0) < computedTotalRaces || currentBadgesJson !== resolvedBadgesJson) {
           await updateDoc(userRef, {
             bestWpm: computedBestWpm,
             avgWpm: computedAvgWpm,
             avgAccuracy: computedAvgAcc,
             totalRaces: computedTotalRaces,
             wins: computedWins,
-            unlockedBadges: profile.unlockedBadges,
+            unlockedBadges: resolvedUnlockedBadges,
             updatedAt: serverTimestamp(),
           });
         }

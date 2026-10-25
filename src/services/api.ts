@@ -577,7 +577,8 @@ export class ApiService {
     let saved: Achievement[] = savedStr ? JSON.parse(savedStr) : [];
     const savedMap = new Map<string, Achievement>(saved.map((a) => [a.id, a]));
 
-    const unlockedSet = new Set<string>(user.unlockedBadges || []);
+    const hasCompletedRaces = (user.totalRaces || 0) > 0 || races.length > 0;
+    const verifiedUnlockedSet = new Set<string>();
 
     // Win streak calculation from race history
     let currentWinStreak = 0;
@@ -586,85 +587,135 @@ export class ApiService {
       else break;
     }
 
+    // First Pass: Evaluate strict metric conditions for all categories
     const merged: Achievement[] = ACHIEVEMENTS_DATA.map((def) => {
       const existing = savedMap.get(def.id);
-      let isUnlocked = unlockedSet.has(def.id) || !!existing?.unlocked;
-
-      // Evaluate actual metric value from restored user statistics and race history
+      let isUnlocked = false;
       let val = 0;
+
       if (def.category === 'races') {
-        val = user.totalRaces || races.length;
+        val = Math.max(user.totalRaces || 0, races.length);
+        if (val >= def.targetValue && def.targetValue > 0) {
+          isUnlocked = true;
+        }
       } else if (def.category === 'speed') {
-        const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
-        val = Math.max(user.bestWpm || 0, maxRaceWpm);
+        if (hasCompletedRaces) {
+          const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
+          val = Math.max(user.bestWpm || 0, maxRaceWpm);
+          if (val >= def.targetValue && def.targetValue > 0) {
+            isUnlocked = true;
+          }
+        }
       } else if (def.category === 'accuracy') {
-        const bestAccRace = races.find((r) => {
-          const totalChars = (r.correctChars || 0) + (r.incorrectChars || 0);
-          const charsOk = !def.minCharsRequired || totalChars >= def.minCharsRequired;
-          const wpmOk = !def.minWpmRequired || r.netWpm >= def.minWpmRequired;
-          return charsOk && wpmOk;
-        });
-        val = bestAccRace ? bestAccRace.accuracy : (user.avgAccuracy >= def.targetValue ? user.avgAccuracy : 0);
+        if (hasCompletedRaces) {
+          const minChars = def.minCharsRequired || 0;
+          const minWpm = def.minWpmRequired || 0;
+
+          const qualifyingRaces = races.filter((r) => {
+            const totalChars = (r.correctChars || 0) + (r.incorrectChars || 0);
+            const charsOk = totalChars >= minChars;
+            const wpmOk = (r.netWpm || 0) >= minWpm;
+            const accOk = (r.accuracy || 0) >= def.targetValue;
+            const backspaceOk = def.id !== 'ach-acc-no-backspace' || (r.backspaces || 0) === 0;
+            return charsOk && wpmOk && accOk && backspaceOk;
+          });
+
+          if (qualifyingRaces.length > 0) {
+            val = def.targetValue;
+            isUnlocked = true;
+          } else {
+            const bestQualifyingAcc = races.reduce((best, r) => {
+              const totalChars = (r.correctChars || 0) + (r.incorrectChars || 0);
+              const charsOk = totalChars >= minChars;
+              const wpmOk = (r.netWpm || 0) >= minWpm;
+              if (charsOk && wpmOk) {
+                return Math.max(best, r.accuracy || 0);
+              }
+              return best;
+            }, 0);
+            val = bestQualifyingAcc;
+          }
+        }
       } else if (def.category === 'wins') {
-        if (def.id.startsWith('ach-win-streak')) {
-          val = currentWinStreak;
-        } else {
-          val = user.totalWins || races.filter((r) => r.finishPosition === 1).length;
+        if (hasCompletedRaces) {
+          if (def.id.startsWith('ach-win-streak')) {
+            val = currentWinStreak;
+          } else {
+            val = Math.max(user.totalWins || 0, races.filter((r) => r.finishPosition === 1).length);
+          }
+          if (val >= def.targetValue && def.targetValue > 0) {
+            isUnlocked = true;
+          }
         }
       } else if (def.category === 'streak') {
-        val = Math.max(user.currentStreak || 0, user.longestStreak || 0);
+        if (hasCompletedRaces) {
+          val = Math.max(user.currentStreak || 0, user.longestStreak || 0);
+          if (val >= def.targetValue && def.targetValue > 0) {
+            isUnlocked = true;
+          }
+        }
       } else if (def.category === 'consistency') {
-        if (def.id === 'ach-zero-typo-3' || def.id === 'ach-zero-typo-10') {
-          val = races.filter((r) => (r.incorrectChars || 0) === 0 || r.accuracy === 100).length;
-        } else if (def.id === 'ach-low-error-burst') {
-          val = races.some((r) => (r.incorrectChars || 0) === 0 && (r.correctChars || 0) >= 200) ? 1 : 0;
-        } else if (def.id === 'ach-high-speed-low-error') {
-          val = races.some((r) => r.netWpm >= 60 && r.accuracy >= 99) ? 1 : 0;
-        } else {
-          const targetAcc = def.targetValue >= 25 ? 98 : def.targetValue >= 15 ? 96 : 95;
-          val = races.filter((r) => r.accuracy >= targetAcc).length;
+        if (hasCompletedRaces) {
+          if (def.id === 'ach-zero-typo-3' || def.id === 'ach-zero-typo-10') {
+            val = races.filter((r) => (r.incorrectChars || 0) === 0 && (r.correctChars || 0) > 0).length;
+          } else if (def.id === 'ach-low-error-burst') {
+            val = races.some((r) => (r.incorrectChars || 0) === 0 && (r.correctChars || 0) >= 200) ? 1 : 0;
+          } else if (def.id === 'ach-high-speed-low-error') {
+            val = races.some((r) => (r.netWpm || 0) >= 60 && (r.accuracy || 0) >= 99) ? 1 : 0;
+          } else {
+            const targetAcc = def.targetValue >= 25 ? 98 : def.targetValue >= 15 ? 96 : 95;
+            val = races.filter((r) => (r.accuracy || 0) >= targetAcc).length;
+          }
+          if (val >= def.targetValue && def.targetValue > 0) {
+            isUnlocked = true;
+          }
         }
       } else if (def.category === 'challenges') {
-        if (def.id === 'ach-challenge-beginner-bot') {
-          val = races.some((r) => r.difficulty === 'beginner' && r.finishPosition === 1) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-inter-bot') {
-          val = races.some((r) => r.difficulty === 'intermediate' && r.finishPosition === 1) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-adv-bot') {
-          val = races.some((r) => r.difficulty === 'advanced' && r.finishPosition === 1) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-expert') {
-          val = races.some((r) => r.difficulty === 'expert' && r.finishPosition === 1) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-code') {
-          val = races.some((r) => r.passageTitle?.toLowerCase().includes('code') || r.accuracy >= 95) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-literature') {
-          val = races.some((r) => r.accuracy >= 95) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-long') {
-          val = races.some((r) => (r.correctChars || 0) + (r.incorrectChars || 0) >= 300) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-sprint') {
-          val = races.some((r) => r.durationSeconds > 0 && r.durationSeconds <= 20) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-night') {
-          val = races.some((r) => {
-            const h = new Date(r.date).getHours();
-            return h >= 22 || h <= 4;
-          }) ? 1 : 0;
-        } else if (def.id === 'ach-challenge-morning') {
-          val = races.some((r) => {
-            const h = new Date(r.date).getHours();
-            return h >= 5 && h <= 9;
-          }) ? 1 : 0;
+        if (hasCompletedRaces) {
+          if (def.id === 'ach-challenge-beginner-bot') {
+            val = races.some((r) => r.difficulty === 'beginner' && r.finishPosition === 1) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-inter-bot') {
+            val = races.some((r) => r.difficulty === 'intermediate' && r.finishPosition === 1) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-adv-bot') {
+            val = races.some((r) => r.difficulty === 'advanced' && r.finishPosition === 1) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-expert') {
+            val = races.some((r) => r.difficulty === 'expert' && r.finishPosition === 1) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-code') {
+            val = races.some((r) => r.passageTitle?.toLowerCase().includes('code') && (r.accuracy || 0) >= 95) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-literature') {
+            val = races.some((r) => r.passageTitle?.toLowerCase().includes('literature') && (r.accuracy || 0) >= 95) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-long') {
+            val = races.some((r) => (r.correctChars || 0) + (r.incorrectChars || 0) >= 300) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-sprint') {
+            val = races.some((r) => r.durationSeconds > 0 && r.durationSeconds <= 20 && r.finishPosition === 1) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-night') {
+            val = races.some((r) => {
+              const h = new Date(r.date).getHours();
+              return h >= 22 || h <= 4;
+            }) ? 1 : 0;
+          } else if (def.id === 'ach-challenge-morning') {
+            val = races.some((r) => {
+              const h = new Date(r.date).getHours();
+              return h >= 5 && h <= 9;
+            }) ? 1 : 0;
+          }
+          if (val >= def.targetValue && def.targetValue > 0) {
+            isUnlocked = true;
+          }
         }
       } else if (def.category === 'legendary') {
         if (def.id.startsWith('ach-level')) {
           val = user.level || 1;
         } else if (def.id.startsWith('ach-collector')) {
           val = user.unlockedCars?.length || 1;
-        } else if (def.id === 'ach-legend-badge-master') {
-          val = unlockedSet.size;
+        }
+        if (val >= def.targetValue && def.targetValue > 0) {
+          isUnlocked = true;
         }
       }
 
-      if (val >= def.targetValue && def.targetValue > 0) {
-        isUnlocked = true;
-        unlockedSet.add(def.id);
+      if (isUnlocked) {
+        verifiedUnlockedSet.add(def.id);
       }
 
       const progress = isUnlocked
@@ -673,19 +724,35 @@ export class ApiService {
 
       return {
         ...def,
-        progress: isUnlocked ? 100 : Math.max(existing?.progress || 0, progress),
+        progress: isUnlocked ? 100 : Math.max(0, progress),
         unlocked: isUnlocked,
-        dateUnlocked: existing?.dateUnlocked || (isUnlocked ? user.lastRaceDate || new Date().toISOString() : undefined),
+        dateUnlocked: isUnlocked ? (existing?.dateUnlocked || user.lastRaceDate || new Date().toISOString()) : undefined,
       };
     });
 
-    // Update profile unlockedBadges if auto-eval resolved newly unlocked badges
-    if (unlockedSet.size > (user.unlockedBadges?.length || 0)) {
-      user.unlockedBadges = Array.from(unlockedSet);
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    // Second Pass: Check badge master legendary achievement using verified unlocked count
+    const badgeMasterDef = merged.find((a) => a.id === 'ach-legend-badge-master');
+    if (badgeMasterDef) {
+      const otherUnlockedCount = verifiedUnlockedSet.has('ach-legend-badge-master')
+        ? verifiedUnlockedSet.size - 1
+        : verifiedUnlockedSet.size;
+      if (otherUnlockedCount >= badgeMasterDef.targetValue) {
+        badgeMasterDef.unlocked = true;
+        badgeMasterDef.progress = 100;
+        verifiedUnlockedSet.add('ach-legend-badge-master');
+      } else {
+        badgeMasterDef.unlocked = false;
+        badgeMasterDef.progress = Math.min(99, Math.round((otherUnlockedCount / badgeMasterDef.targetValue) * 100));
+        verifiedUnlockedSet.delete('ach-legend-badge-master');
+      }
     }
 
+    // Reconcile profile unlockedBadges array to match verified set
+    const updatedUnlockedBadges = Array.from(verifiedUnlockedSet);
+    user.unlockedBadges = updatedUnlockedBadges;
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(merged));
+
     return merged;
   }
 
