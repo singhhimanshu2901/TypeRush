@@ -32,17 +32,27 @@ export function App() {
   // Result State
   const [lastResult, setLastResult] = useState<RaceResult | null>(null);
 
+  // Sync raceCarId whenever activeUser's equipped car changes
+  React.useEffect(() => {
+    if (activeUser.equippedCarId) {
+      setRaceCarId(activeUser.equippedCarId);
+    }
+  }, [activeUser.equippedCarId]);
+
   const handleUserUpdate = async (updatedUser: User) => {
     await ApiService.updateUserProfile(updatedUser);
     setLocalUser(updatedUser);
+    if (updatedUser.equippedCarId) {
+      setRaceCarId(updatedUser.equippedCarId);
+    }
     await refreshProfile();
   };
 
-  const handleLaunchRace = (mode: RaceMode, difficulty: Difficulty, passage: Passage, carId: string) => {
+  const handleLaunchRace = (mode: RaceMode, difficulty: Difficulty, passage: Passage, carId?: string) => {
     setRaceMode(mode);
     setRaceDifficulty(difficulty);
     setRacePassage(passage);
-    setRaceCarId(carId);
+    setRaceCarId(carId || activeUser.equippedCarId || 'car-apex-racer');
     setActiveTab('race');
   };
 
@@ -89,7 +99,7 @@ export function App() {
             mode={raceMode}
             difficulty={raceDifficulty}
             passage={racePassage}
-            carId={raceCarId}
+            carId={raceCarId || activeUser.equippedCarId || 'car-apex-racer'}
             onFinishRace={handleFinishRace}
             onCancelRace={() => setActiveTab('setup')}
           />

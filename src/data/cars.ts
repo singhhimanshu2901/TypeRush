@@ -1,4 +1,8 @@
-import { CarModel } from '../types';
+export function getCarById(carId?: string | null): CarModel {
+  if (!carId) return CAR_MODELS[0];
+  const found = CAR_MODELS.find((c) => c.id === carId);
+  return found || CAR_MODELS[0];
+}
 
 export const CAR_MODELS: CarModel[] = [
   // ==========================================

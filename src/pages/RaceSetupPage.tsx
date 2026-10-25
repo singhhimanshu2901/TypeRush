@@ -16,6 +16,12 @@ export const RaceSetupPage: React.FC<RaceSetupPageProps> = ({ user, onLaunchRace
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedCarId, setSelectedCarId] = useState<string>(user.equippedCarId);
 
+  React.useEffect(() => {
+    if (user.equippedCarId) {
+      setSelectedCarId(user.equippedCarId);
+    }
+  }, [user.equippedCarId]);
+
   // Filter passages based on difficulty and category
   const filteredPassages = PASSAGES.filter((p) => {
     const diffMatch = p.difficulty === selectedDifficulty;
@@ -45,7 +51,7 @@ export const RaceSetupPage: React.FC<RaceSetupPageProps> = ({ user, onLaunchRace
       return;
     }
     const passageToUse = selectedPassage || filteredPassages[0] || PASSAGES[0];
-    onLaunchRace(selectedMode, selectedDifficulty, passageToUse, selectedCarId);
+    onLaunchRace(selectedMode, selectedDifficulty, passageToUse, user.equippedCarId);
   };
 
   return (

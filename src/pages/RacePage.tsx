@@ -4,6 +4,7 @@ import { RaceTrackCanvas, ParticipantTrackData } from '../components/RaceTrackCa
 import { TypingArea } from '../components/TypingArea';
 import { calculateGrossWpm, calculateNetWpm, calculateAccuracy, calculateXpEarned } from '../utils/typingEngine';
 import { ApiService } from '../services/api';
+import { CAR_MODELS, getCarById } from '../data/cars';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 
 interface RacePageProps {
@@ -50,46 +51,67 @@ export const RacePage: React.FC<RacePageProps> = ({
   const [aiRacers, setAiRacers] = useState<AIRacer[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize AI Racers on Mount based on difficulty
+  // Initialize AI Racers on Mount based on difficulty & picking distinct vehicles from CAR_MODELS
   useEffect(() => {
     let baseWpm = 35;
     if (difficulty === 'intermediate') baseWpm = 55;
     if (difficulty === 'advanced') baseWpm = 80;
     if (difficulty === 'expert') baseWpm = 105;
 
+    const playerCarId = carId || user.equippedCarId || 'car-apex-racer';
+    const otherCars = CAR_MODELS.filter((c) => c.id !== playerCarId);
+
+    // Select 3 distinct vehicles
+    const bot1Car = otherCars[Math.floor(Math.random() * otherCars.length)] || CAR_MODELS[1];
+    const remainingCars1 = otherCars.filter((c) => c.id !== bot1Car.id);
+    const bot2Car = remainingCars1[Math.floor(Math.random() * remainingCars1.length)] || CAR_MODELS[2];
+    const remainingCars2 = remainingCars1.filter((c) => c.id !== bot2Car.id);
+    const bot3Car = remainingCars2[Math.floor(Math.random() * remainingCars2.length)] || CAR_MODELS[3];
+
+    const botProfiles = [
+      { name: 'Apex Striker AI', avatar: '🤖' },
+      { name: 'Cyber Velocity', avatar: '⚡' },
+      { name: 'Phantom Driver', avatar: '🔥' },
+      { name: 'Nitro Renegade', avatar: '🏎️' },
+      { name: 'Veloce Rival', avatar: '🏆' },
+      { name: 'Shadow Racer', avatar: '🕶️' },
+    ];
+
+    const shuffled = [...botProfiles].sort(() => 0.5 - Math.random());
+
     const bots: AIRacer[] = [
       {
         id: 'bot-1',
-        name: 'Apex Striker AI',
-        avatar: '🤖',
-        carId: 'car-neon-viper',
+        name: shuffled[0].name,
+        avatar: shuffled[0].avatar,
+        carId: bot1Car.id,
         targetWpm: baseWpm + (Math.random() * 8 - 4),
         variance: 0.1,
-        color: '#06b6d4',
+        color: bot1Car.bodyColor,
         currentProgress: 0,
         currentWpm: baseWpm,
         position: 2,
       },
       {
         id: 'bot-2',
-        name: 'Cyber Velocity',
-        avatar: '⚡',
-        carId: 'car-cyber-speedster',
+        name: shuffled[1].name,
+        avatar: shuffled[1].avatar,
+        carId: bot2Car.id,
         targetWpm: baseWpm - 6 + Math.random() * 6,
         variance: 0.15,
-        color: '#10b981',
+        color: bot2Car.bodyColor,
         currentProgress: 0,
         currentWpm: baseWpm - 5,
         position: 3,
       },
       {
         id: 'bot-3',
-        name: 'Phantom Driver',
-        avatar: '🔥',
-        carId: 'car-phantom-gt',
+        name: shuffled[2].name,
+        avatar: shuffled[2].avatar,
+        carId: bot3Car.id,
         targetWpm: baseWpm + 4 + Math.random() * 6,
         variance: 0.08,
-        color: '#a855f7',
+        color: bot3Car.bodyColor,
         currentProgress: 0,
         currentWpm: baseWpm + 4,
         position: 4,
@@ -101,7 +123,7 @@ export const RacePage: React.FC<RacePageProps> = ({
     } else {
       setAiRacers(bots);
     }
-  }, [difficulty, mode]);
+  }, [difficulty, mode, carId, user.equippedCarId]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -240,13 +262,26 @@ export const RacePage: React.FC<RacePageProps> = ({
 
   // Calculate user progress
   const userProgress = passage.charCount > 0 ? Math.min(1.0, userTyped.length / passage.charCount) : 0;
+  const activeCarId = carId || user.equippedCarId || 'car-apex-racer';
+  const resolvedCar = getCarById(activeCarId);
+
+  useEffect(() => {
+    console.log('[TypeRush Race Initialization]', {
+      userEquippedCarId: user.equippedCarId,
+      propCarId: carId,
+      activeCarId,
+      resolvedCarName: resolvedCar.name,
+      resolvedCarCategory: resolvedCar.category,
+      resolvedCarId: resolvedCar.id,
+    });
+  }, [user.equippedCarId, carId, activeCarId, resolvedCar]);
 
   let allTrackParticipants: ParticipantTrackData[] = [
     {
       id: user.id,
       name: user.username,
       avatar: user.avatar,
-      carId,
+      carId: activeCarId,
       progress: userProgress,
       currentWpm: userWpm,
       isUser: true,
@@ -271,6 +306,8 @@ export const RacePage: React.FC<RacePageProps> = ({
     ...p,
     position: index + 1,
   }));
+
+  const userParticipant = allTrackParticipants.find((p) => p.isUser);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 relative">
@@ -338,6 +375,36 @@ export const RacePage: React.FC<RacePageProps> = ({
 
       {/* Top 2D Track View */}
       <RaceTrackCanvas participants={allTrackParticipants} isRacing={isRacing && !isPaused} />
+
+      {/* TEMPORARY RUNTIME VEHICLE TELEMETRY DEBUG PANEL */}
+      <div className="bg-slate-950 border border-amber-500/40 rounded-2xl p-3.5 text-xs font-mono space-y-1 text-slate-300 shadow-xl">
+        <div className="text-[10px] font-black uppercase text-amber-400 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+          Live Race Vehicle Telemetry Debugger
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 text-[11px]">
+          <div>
+            <span className="text-slate-500 block text-[9px] uppercase">User Equipped</span>
+            <span className="text-white font-bold truncate block">{user.equippedCarId || 'none'}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[9px] uppercase">Race Entity ID</span>
+            <span className="text-cyan-400 font-bold truncate block">{activeCarId}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[9px] uppercase">Resolved Vehicle</span>
+            <span className="text-rose-400 font-bold truncate block">{resolvedCar.name}</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[9px] uppercase">Category / Body</span>
+            <span className="text-amber-300 font-bold truncate block">{resolvedCar.category} ({resolvedCar.geometry.roofline})</span>
+          </div>
+          <div>
+            <span className="text-slate-500 block text-[9px] uppercase">Canvas Car ID</span>
+            <span className="text-emerald-400 font-bold truncate block">{userParticipant?.carId}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Center Typing Interface */}
       <TypingArea
