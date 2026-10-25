@@ -3,6 +3,7 @@ import { CAR_MODELS } from '../data/cars';
 import { ACHIEVEMENTS_DATA } from '../data/achievements';
 import { DAILY_CHALLENGES_DEFAULT } from '../data/challenges';
 import { db, auth } from '../config/firebase';
+import { updateProfile } from 'firebase/auth';
 import {
   collection,
   doc,
@@ -78,33 +79,80 @@ export class ApiService {
   static async updateUserProfile(updates: Partial<User>): Promise<User> {
     const current = this.getUser();
     const updated = { ...current, ...updates };
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
 
-    // Update in Firestore if logged in
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        const userRef = doc(db, 'users', currentUser.uid);
-        await updateDoc(userRef, {
-          displayName: updated.username,
-          photoURL: updated.avatar,
-          equippedCarId: updated.equippedCarId,
-          updatedAt: serverTimestamp(),
-        });
+        // 1. Synchronize Firebase Auth User profile (displayName & photoURL)
+        const authUpdates: { displayName?: string; photoURL?: string } = {};
+        if (updates.username !== undefined) authUpdates.displayName = updates.username;
+        if (updates.avatar !== undefined) authUpdates.photoURL = updates.avatar;
 
+        if (Object.keys(authUpdates).length > 0) {
+          await updateProfile(currentUser, authUpdates);
+        }
+
+        // 2. Update Firestore user doc with merge: true (preserves existing fields and complies with rules)
+        const userRef = doc(db, 'users', currentUser.uid);
+        await setDoc(
+          userRef,
+          {
+            displayName: updated.username,
+            photoURL: updated.avatar,
+            equippedCarId: updated.equippedCarId,
+            xp: updated.xp ?? 0,
+            level: updated.level ?? 1,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // 3. Update public leaderboard entry
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
-        await updateDoc(lbRef, {
-          displayName: updated.username,
-          avatar: updated.avatar,
-          equippedCarId: updated.equippedCarId,
-          updatedAt: serverTimestamp(),
-        });
+        await setDoc(
+          lbRef,
+          {
+            uid: currentUser.uid,
+            displayName: updated.username,
+            avatar: updated.avatar,
+            equippedCarId: updated.equippedCarId,
+            level: updated.level ?? 1,
+            title: updated.title ?? 'Rookie Driver',
+            bestWpm: updated.bestWpm ?? 0,
+            avgAccuracy: updated.avgAccuracy ?? 100,
+            totalWins: updated.totalWins ?? 0,
+            totalRaces: updated.totalRaces ?? 0,
+            xp: updated.xp ?? 0,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       } catch (err) {
         handleFirestoreError(err, 'update', `users/${currentUser.uid}`);
+        throw err;
       }
     }
 
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
     return updated;
+  }
+
+  // Alias for compatibility
+  static async updateUser(updates: Partial<User>): Promise<User> {
+    return this.updateUserProfile(updates);
+  }
+
+  // Safely clear cached user data on logout
+  static clearUserDataOnLogout(): void {
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.removeItem(STORAGE_KEYS.RACES);
+    localStorage.removeItem(STORAGE_KEYS.ACHIEVEMENTS);
+    localStorage.removeItem(STORAGE_KEYS.CHALLENGES);
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('typerush_imported_')) {
+        localStorage.removeItem(key);
+      }
+    });
   }
 
   static async saveRaceResult(result: RaceResult): Promise<{ user: User; newAchievements: Achievement[] }> {

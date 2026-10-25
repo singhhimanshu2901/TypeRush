@@ -10,9 +10,9 @@ interface GaragePageProps {
 }
 
 export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) => {
-  const handleEquipCar = (carId: string) => {
-    const updated = ApiService.updateUser({ equippedCarId: carId });
-    onUserUpdate(updated);
+  const handleEquipCar = async (carId: string) => {
+    const updated = await ApiService.updateUserProfile({ equippedCarId: carId });
+    await onUserUpdate(updated);
   };
 
   return (

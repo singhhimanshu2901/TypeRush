@@ -1,36 +1,100 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ApiService } from '../services/api';
-import { User as UserIcon, Gauge, Trophy, Flame, Edit3, Save } from 'lucide-react';
+import { Edit3, Save, X, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
 import { UserAvatar } from '../components/UserAvatar';
 
 interface ProfilePageProps {
   user: User;
-  onUserUpdate: (updatedUser: User) => void;
+  onUserUpdate: (updatedUser: User) => Promise<void> | void;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState(user.username);
   const [avatar, setAvatar] = useState(user.avatar);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const races = ApiService.getRaces();
 
-  const handleSave = () => {
-    const updated = ApiService.updateUser({ username, avatar });
-    onUserUpdate(updated);
+  const handleStartEdit = () => {
+    setUsername(user.username);
+    setAvatar(user.avatar);
+    setSaveError(null);
+    setSaveSuccess(null);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setUsername(user.username);
+    setAvatar(user.avatar);
+    setSaveError(null);
     setIsEditing(false);
   };
 
-  const avatars = ['🏎️', '⚡', '🤖', '🏁', '🔥', '🏆', '🚀', '🕶️'];
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    const trimmedName = username.trim();
+    if (!trimmedName) {
+      setSaveError('Display name cannot be empty.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    try {
+      const updatedUser: User = {
+        ...user,
+        username: trimmedName,
+        avatar: avatar,
+      };
+
+      await ApiService.updateUserProfile({
+        username: trimmedName,
+        avatar: avatar,
+      });
+
+      await onUserUpdate(updatedUser);
+
+      setSaveSuccess('Profile updated successfully!');
+      setIsEditing(false);
+    } catch (err: unknown) {
+      console.error('[ProfilePage] Error saving profile:', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save profile. Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const avatarPresets = ['🏎️', '⚡', '🤖', '🏁', '🔥', '🏆', '🚀', '🕶️'];
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
+      {/* Feedback Alerts */}
+      {saveSuccess && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-4 py-3 rounded-2xl flex items-center gap-3 text-sm font-bold shadow-lg">
+          <CheckCircle className="w-5 h-5 shrink-0 text-emerald-400" />
+          <span>{saveSuccess}</span>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-2xl flex items-center gap-3 text-sm font-bold shadow-lg">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400" />
+          <span>{saveError}</span>
+        </div>
+      )}
+
       {/* Driver ID Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative">
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="relative">
+          <div className="relative flex flex-col items-center">
             <UserAvatar
               avatar={avatar}
               alt={user.username}
@@ -38,9 +102,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
               textClassName="text-5xl"
             />
             {isEditing && (
-              <div className="absolute -bottom-2 -right-2 flex gap-1 bg-slate-900 border border-slate-700 p-1 rounded-xl">
-                {avatars.slice(0, 4).map((av) => (
-                  <button key={av} onClick={() => setAvatar(av)} className="text-sm hover:scale-125 transition-transform">
+              <div className="mt-3 flex flex-wrap gap-1.5 justify-center max-w-[240px] bg-slate-950/80 border border-slate-800 p-2 rounded-2xl shadow-md">
+                {avatarPresets.map((av) => (
+                  <button
+                    key={av}
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => setAvatar(av)}
+                    className={`text-lg p-1 rounded-xl transition-all ${
+                      avatar === av ? 'bg-rose-500/30 border border-rose-500 scale-110' : 'hover:scale-125'
+                    }`}
+                  >
                     {av}
                   </button>
                 ))}
@@ -48,33 +120,75 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
             )}
           </div>
 
-          <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
+          <div className="space-y-3 text-center sm:text-left flex-1 min-w-0 w-full">
             {isEditing ? (
-              <div className="flex items-center gap-2 max-w-full">
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="bg-slate-950 border border-rose-500 font-black text-xl text-white px-3 py-1.5 rounded-xl outline-none min-w-0 w-full"
-                />
-                <button
-                  onClick={handleSave}
-                  className="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold shrink-0"
-                >
-                  <Save className="w-4 h-4" />
-                </button>
-              </div>
+              <form onSubmit={handleSave} className="space-y-3 w-full">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    disabled={isSaving}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    maxLength={24}
+                    placeholder="Enter display name"
+                    className="bg-slate-950 border border-rose-500/80 focus:border-rose-500 font-bold text-lg text-white px-4 py-2 rounded-2xl outline-none w-full shadow-inner disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={isSaving || !username.trim()}
+                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-2xl font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-rose-600/30"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save Profile</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleCancelEdit}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold text-sm flex items-center gap-1.5 transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              </form>
             ) : (
-              <div className="flex items-center justify-center sm:justify-start gap-3 min-w-0">
-                <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px]">{user.username}</h1>
-                <button onClick={() => setIsEditing(true)} className="text-slate-500 hover:text-white shrink-0">
-                  <Edit3 className="w-4 h-4" />
-                </button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-center sm:justify-start gap-3 min-w-0">
+                  <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px]">
+                    {user.username}
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={handleStartEdit}
+                    className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors shrink-0"
+                    title="Edit Profile"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-rose-400 font-extrabold text-xs uppercase tracking-wider truncate">{user.title}</p>
+                <p className="text-slate-400 text-xs font-medium truncate">
+                  Driver Level {user.level} &bull; {user.xp} Total XP
+                </p>
               </div>
             )}
-
-            <p className="text-rose-400 font-extrabold text-xs uppercase tracking-wider truncate">{user.title}</p>
-            <p className="text-slate-400 text-xs font-medium truncate">Driver Level {user.level} &bull; {user.xp} Total XP</p>
           </div>
         </div>
       </div>

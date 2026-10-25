@@ -39,6 +39,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userRef = doc(db, 'users', fbUser.uid);
       const snapshot = await getDoc(userRef);
 
+      // Guard against stale async resolution if user signed out or switched mid-flight
+      if (auth.currentUser?.uid !== fbUser.uid) {
+        return;
+      }
+
       if (snapshot.exists()) {
         const data = snapshot.data();
         const races = ApiService.getRaces();
@@ -65,10 +70,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unlockedBadges: data.unlockedBadges || [],
           title: data.title || 'Rookie Driver',
         };
-        setUserProfile(profile);
 
-        // Mirror to local storage for offline fast read
-        localStorage.setItem('typerush_user', JSON.stringify(profile));
+        if (auth.currentUser?.uid === fbUser.uid) {
+          setUserProfile(profile);
+          localStorage.setItem('typerush_user', JSON.stringify(profile));
+        }
 
         // Sync back bestWpm if Firestore had 0
         if ((data.bestWpm || 0) < computedBestWpm) {
@@ -158,8 +164,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updatedAt: serverTimestamp(),
         });
 
-        setUserProfile(newProfile);
-        localStorage.setItem('typerush_user', JSON.stringify(newProfile));
+        if (auth.currentUser?.uid === fbUser.uid) {
+          setUserProfile(newProfile);
+          localStorage.setItem('typerush_user', JSON.stringify(newProfile));
+        }
       }
     } catch (err) {
       console.error('[Firebase Auth] Error syncing user profile:', err);
@@ -167,17 +175,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
       setCurrentUser(user);
+
       if (user) {
         await syncFirestoreProfile(user);
       } else {
         setUserProfile(null);
+        ApiService.clearUserDataOnLogout();
       }
-      setLoading(false);
+
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -200,7 +219,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signOut(auth);
       setUserProfile(null);
-      localStorage.removeItem('typerush_user');
+      setCurrentUser(null);
+      ApiService.clearUserDataOnLogout();
     } catch (error) {
       console.error('[Firebase Auth] Sign-Out failed:', error);
     } finally {
