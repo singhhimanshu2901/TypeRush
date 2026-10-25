@@ -165,41 +165,41 @@ export const RaceSetupPage: React.FC<RaceSetupPageProps> = ({ user, onLaunchRace
         </div>
       </div>
 
-      {/* Step 4: Choose Car Model */}
-      <div className="space-y-3">
-        <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-          <span>4.</span> CHOOSE YOUR RACING CAR
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {CAR_MODELS.map((car) => {
-            const isUnlocked = user.unlockedCars.includes(car.id);
-            const isSelected = selectedCarId === car.id;
-            return (
-              <button
-                key={car.id}
-                disabled={!isUnlocked}
-                onClick={() => setSelectedCarId(car.id)}
-                className={`p-4 rounded-2xl border text-center transition-all relative ${
-                  !isUnlocked
-                    ? 'opacity-40 bg-slate-950 border-slate-900 cursor-not-allowed'
-                    : isSelected
-                    ? 'bg-slate-900 border-rose-500 ring-2 ring-rose-500/30'
-                    : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                }`}
+      {/* Active Equipped Car (Automatically Bounded from Garage) */}
+      {(() => {
+        const equippedCar = CAR_MODELS.find((c) => c.id === (user.equippedCarId || 'car-apex-racer')) || CAR_MODELS[0];
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-4">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-inner border border-slate-700"
+                style={{ backgroundColor: equippedCar.bodyColor + '30' }}
               >
-                <div className="text-3xl mb-2">🏎️</div>
-                <div className="font-bold text-xs text-white">{car.name}</div>
-                <div className="text-[10px] font-semibold text-rose-400 mt-1">{car.topSpeedMph} MPH Top</div>
-                {!isUnlocked && (
-                  <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded mt-2 inline-block">
-                    Unlocks L{car.unlockLevel}
+                🏎️
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    Active Vehicle
                   </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {equippedCar.speedClass} Class
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-lg text-white mt-1">{equippedCar.name}</h3>
+                <p className="text-xs text-slate-400">
+                  Top Speed: <strong className="text-rose-400">{equippedCar.topSpeedMph} MPH</strong> &bull; Acceleration: <strong className="text-cyan-400">{equippedCar.accelerationStat}%</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-400 text-right">
+              <p className="font-medium">Equipped from Garage</p>
+              <p className="text-[11px] text-slate-500">Races automatically use your equipped vehicle.</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Launch Race CTA */}
       <div className="pt-4 text-center">

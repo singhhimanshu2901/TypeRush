@@ -18,10 +18,11 @@ export const AchievementsPage: React.FC<AchievementsPageProps> = ({ user }) => {
     { id: 'speed', label: 'Typing Speed' },
     { id: 'accuracy', label: 'Accuracy' },
     { id: 'races', label: 'Races' },
-    { id: 'wins', label: 'Wins' },
+    { id: 'wins', label: 'Wins & Streaks' },
     { id: 'consistency', label: 'Consistency' },
-    { id: 'streak', label: 'Streaks' },
+    { id: 'streak', label: 'Daily Streaks' },
     { id: 'challenges', label: 'Challenges' },
+    { id: 'legendary', label: 'Legendary' },
   ];
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
@@ -37,6 +38,8 @@ export const AchievementsPage: React.FC<AchievementsPageProps> = ({ user }) => {
 
   const getRarityBadge = (rarity?: string) => {
     switch (rarity) {
+      case 'Mythic':
+        return 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/40 font-extrabold shadow-sm';
       case 'Legendary':
         return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
       case 'Epic':
@@ -59,7 +62,7 @@ export const AchievementsPage: React.FC<AchievementsPageProps> = ({ user }) => {
         </h1>
         <p className="text-slate-400 text-sm font-medium">
           Unlocked <strong className="text-emerald-400">{unlockedCount}</strong> of{' '}
-          <strong className="text-white">{achievements.length}</strong> Badges across 7 Categories
+          <strong className="text-white">{achievements.length}</strong> Badges across 8 Categories
         </p>
       </div>
 

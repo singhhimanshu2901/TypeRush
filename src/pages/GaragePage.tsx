@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { CAR_MODELS } from '../data/cars';
 import { ApiService } from '../services/api';
+import { CarGraphic } from '../components/CarGraphic';
 import { Zap, CheckCircle, Lock, Shield, Sparkles } from 'lucide-react';
 
 interface GaragePageProps {
@@ -118,30 +119,10 @@ export const GaragePage: React.FC<GaragePageProps> = ({ user, onUserUpdate }) =>
                   )}
                 </div>
 
-                {/* Car Preview Box with SVG Chassis */}
+                {/* Car Preview Box with SVG Vector Chassis */}
                 <div className="bg-slate-950 border border-slate-800 rounded-2xl h-36 flex items-center justify-center relative overflow-hidden group">
-                  <div className="relative w-40 h-20 flex items-center justify-center">
-                    {/* Visual Car Shell */}
-                    <div
-                      className="w-32 h-10 rounded-xl relative shadow-lg transition-transform group-hover:scale-105"
-                      style={{ backgroundColor: car.bodyColor }}
-                    >
-                      {/* Racing Stripe */}
-                      <div
-                        className="absolute inset-x-0 top-3 h-1.5"
-                        style={{ backgroundColor: car.stripeColor }}
-                      />
-                      {/* Cockpit Glass */}
-                      <div className="absolute top-1 left-8 w-12 h-4 rounded bg-slate-900 border border-slate-700/60 opacity-90" />
-                      {/* Side Accent */}
-                      <div
-                        className="absolute bottom-1 inset-x-3 h-1 rounded-full"
-                        style={{ backgroundColor: car.accentColor }}
-                      />
-                      {/* Wheels */}
-                      <div className="absolute -bottom-2 left-3 w-5 h-5 bg-slate-900 rounded-full border-2 border-slate-600" />
-                      <div className="absolute -bottom-2 right-3 w-5 h-5 bg-slate-900 rounded-full border-2 border-slate-600" />
-                    </div>
+                  <div className="transition-transform duration-300 group-hover:scale-110">
+                    <CarGraphic car={car} size="md" />
                   </div>
 
                   <div

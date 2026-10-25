@@ -1,0 +1,53 @@
+{
+  "users": {
+    "usr-1": {
+      "id": "usr-1",
+      "username": "SpeedRacer",
+      "email": "speedracer@typerush.app",
+      "avatar": "🏎️",
+      "level": 1,
+      "xp": 150,
+      "currentStreak": 1,
+      "longestStreak": 3,
+      "lastRaceDate": "2026-10-25",
+      "totalRaces": 2,
+      "totalWins": 1,
+      "avgWpm": 48,
+      "bestWpm": 58,
+      "avgAccuracy": 96.5,
+      "equippedCarId": "car-apex-racer",
+      "unlockedCars": [
+        "car-apex-racer"
+      ],
+      "unlockedBadges": [
+        "ach-first-race"
+      ],
+      "title": "Rookie Driver",
+      "updatedAt": "2026-10-25T16:22:38.661Z"
+    }
+  },
+  "races": [
+    {
+      "id": "race-init-1",
+      "userId": "usr-1",
+      "username": "SpeedRacer",
+      "mode": "ai",
+      "difficulty": "beginner",
+      "passageId": "beg-1",
+      "passageTitle": "Keyboard Mastery",
+      "grossWpm": 52,
+      "netWpm": 48,
+      "accuracy": 96.2,
+      "durationSeconds": 32,
+      "correctChars": 138,
+      "incorrectChars": 3,
+      "backspaces": 4,
+      "finishPosition": 1,
+      "totalParticipants": 4,
+      "xpEarned": 150,
+      "date": "2026-10-25T16:22:38.661Z"
+    }
+  ],
+  "achievements": {},
+  "multiplayerRooms": {}
+}

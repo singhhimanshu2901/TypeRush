@@ -173,34 +173,108 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
           ctx.fill();
         }
 
+        // Tier & Car Neon Underglow
+        if (carModel.neonGlowColor || carModel.speedClass === 'Hyper' || carModel.speedClass === 'Legendary' || carModel.speedClass === 'Mythic') {
+          ctx.fillStyle = carModel.neonGlowColor || carColor;
+          ctx.globalAlpha = 0.35;
+          ctx.beginPath();
+          ctx.ellipse(currentCarX, laneCenterY, 28, 12, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+        }
+
         // Car Body Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.beginPath();
-        ctx.ellipse(currentCarX, laneCenterY + 12, 22, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(currentCarX, laneCenterY + 12, 24, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Car Body Shape
+        // Car Body Geometry based on bodyType
         ctx.fillStyle = carColor;
         ctx.beginPath();
-        ctx.roundRect(currentCarX - 24, laneCenterY - 11, 46, 22, [6, 11, 11, 6]);
+        if (carModel.bodyType === 'formula') {
+          // Open wheel formula nose & cockpit
+          ctx.moveTo(currentCarX + 26, laneCenterY);
+          ctx.lineTo(currentCarX + 12, laneCenterY - 6);
+          ctx.lineTo(currentCarX - 18, laneCenterY - 8);
+          ctx.lineTo(currentCarX - 24, laneCenterY - 11);
+          ctx.lineTo(currentCarX - 24, laneCenterY + 11);
+          ctx.lineTo(currentCarX - 18, laneCenterY + 8);
+          ctx.lineTo(currentCarX + 12, laneCenterY + 6);
+          ctx.closePath();
+        } else if (carModel.bodyType === 'jet') {
+          // Needle jet nose
+          ctx.moveTo(currentCarX + 30, laneCenterY);
+          ctx.lineTo(currentCarX + 10, laneCenterY - 10);
+          ctx.lineTo(currentCarX - 24, laneCenterY - 11);
+          ctx.lineTo(currentCarX - 24, laneCenterY + 11);
+          ctx.lineTo(currentCarX + 10, laneCenterY + 10);
+          ctx.closePath();
+        } else if (carModel.bodyType === 'cyberpunk') {
+          // Polygon stealth lines
+          ctx.moveTo(currentCarX + 24, laneCenterY - 4);
+          ctx.lineTo(currentCarX + 18, laneCenterY - 11);
+          ctx.lineTo(currentCarX - 20, laneCenterY - 11);
+          ctx.lineTo(currentCarX - 24, laneCenterY - 6);
+          ctx.lineTo(currentCarX - 24, laneCenterY + 6);
+          ctx.lineTo(currentCarX - 20, laneCenterY + 11);
+          ctx.lineTo(currentCarX + 18, laneCenterY + 11);
+          ctx.lineTo(currentCarX + 24, laneCenterY + 4);
+          ctx.closePath();
+        } else {
+          // Standard / Sports / Supercar roundRect chassis
+          ctx.roundRect(currentCarX - 24, laneCenterY - 11, 48, 22, [5, 12, 12, 5]);
+        }
         ctx.fill();
+
+        // Racing Stripe
+        ctx.fillStyle = carModel.stripeColor || '#ffffff';
+        ctx.fillRect(currentCarX - 24, laneCenterY - 1.5, 48, 3);
 
         // Cockpit Glass
         ctx.fillStyle = '#0f172a';
         ctx.beginPath();
-        ctx.roundRect(currentCarX - 8, laneCenterY - 7, 18, 14, 3);
+        if (carModel.bodyType === 'formula') {
+          ctx.arc(currentCarX - 2, laneCenterY, 5, 0, Math.PI * 2);
+        } else {
+          ctx.roundRect(currentCarX - 6, laneCenterY - 7, 18, 14, 3);
+        }
         ctx.fill();
 
-        // Stripe
-        ctx.fillStyle = carModel.stripeColor || '#ffffff';
-        ctx.fillRect(currentCarX - 24, laneCenterY - 1.5, 46, 3);
+        // Front Headlights
+        ctx.fillStyle = carModel.headlightColor || '#fef08a';
+        ctx.fillRect(currentCarX + 20, laneCenterY - 9, 3, 4);
+        ctx.fillRect(currentCarX + 20, laneCenterY + 5, 3, 4);
+
+        // Rear Wing / Spoiler
+        if (carModel.wingStyle && carModel.wingStyle !== 'none') {
+          ctx.fillStyle = carModel.accentColor || '#f59e0b';
+          if (carModel.wingStyle === 'f1_wing' || carModel.wingStyle === 'plasma_wings') {
+            ctx.fillRect(currentCarX - 28, laneCenterY - 14, 6, 28);
+          } else {
+            ctx.fillRect(currentCarX - 26, laneCenterY - 12, 4, 24);
+          }
+        }
 
         // Wheels
-        ctx.fillStyle = '#111827';
+        const rimColor =
+          carModel.wheelStyle === 'gold_bbs'
+            ? '#f59e0b'
+            : carModel.wheelStyle === 'neon_ring' || carModel.wheelStyle === 'plasma_disc'
+            ? carModel.accentColor || '#38bdf8'
+            : '#64748b';
+
+        ctx.fillStyle = '#090d16';
         ctx.fillRect(currentCarX - 18, laneCenterY - 14, 11, 4);
         ctx.fillRect(currentCarX + 8, laneCenterY - 14, 11, 4);
         ctx.fillRect(currentCarX - 18, laneCenterY + 10, 11, 4);
         ctx.fillRect(currentCarX + 8, laneCenterY + 10, 11, 4);
+
+        ctx.fillStyle = rimColor;
+        ctx.fillRect(currentCarX - 16, laneCenterY - 13, 7, 2);
+        ctx.fillRect(currentCarX + 10, laneCenterY - 13, 7, 2);
+        ctx.fillRect(currentCarX - 16, laneCenterY + 11, 7, 2);
+        ctx.fillRect(currentCarX + 10, laneCenterY + 11, 7, 2);
 
         // Position Badge (#1, #2, etc.)
         const posColor =

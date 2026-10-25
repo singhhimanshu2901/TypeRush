@@ -340,6 +340,13 @@ export class ApiService {
     const newUnlocked: Achievement[] = [];
     const unlockedBadges = [...user.unlockedBadges];
 
+    // Compute current win streak from recent races
+    let currentWinStreak = 0;
+    for (const r of races) {
+      if (r.finishPosition === 1) currentWinStreak++;
+      else break;
+    }
+
     achievements.forEach((ach) => {
       if (!ach.unlocked) {
         let val = 0;
@@ -349,19 +356,63 @@ export class ApiService {
           val = bestWpm;
         } else if (ach.category === 'accuracy') {
           const totalChars = (result.correctChars || 0) + (result.incorrectChars || 0);
-          if (!ach.minCharsRequired || totalChars >= ach.minCharsRequired) {
+          const charsOk = !ach.minCharsRequired || totalChars >= ach.minCharsRequired;
+          const wpmOk = !ach.minWpmRequired || result.netWpm >= ach.minWpmRequired;
+          if (charsOk && wpmOk) {
             val = result.accuracy;
           }
         } else if (ach.category === 'wins') {
-          val = wins;
+          if (ach.id.startsWith('ach-win-streak')) {
+            val = currentWinStreak;
+          } else {
+            val = wins;
+          }
         } else if (ach.category === 'streak') {
-          val = streak;
+          val = Math.max(streak, user.longestStreak || 0);
         } else if (ach.category === 'consistency') {
-          const minAcc = ach.targetValue >= 25 ? 98 : 95;
-          val = races.filter((r) => r.accuracy >= minAcc).length;
+          if (ach.id === 'ach-zero-typo-3' || ach.id === 'ach-zero-typo-10') {
+            val = races.filter((r) => (r.incorrectChars || 0) === 0 || r.accuracy === 100).length;
+          } else if (ach.id === 'ach-low-error-burst') {
+            const totalChars = (result.correctChars || 0) + (result.incorrectChars || 0);
+            val = (result.incorrectChars || 0) === 0 && totalChars >= 200 ? 1 : 0;
+          } else if (ach.id === 'ach-high-speed-low-error') {
+            val = result.netWpm >= 60 && result.accuracy >= 99 ? 1 : 0;
+          } else {
+            const targetAcc = ach.targetValue >= 25 ? 98 : ach.targetValue >= 15 ? 96 : 95;
+            val = races.filter((r) => r.accuracy >= targetAcc).length;
+          }
         } else if (ach.category === 'challenges') {
-          if (ach.id === 'ach-challenge-expert') {
+          if (ach.id === 'ach-challenge-beginner-bot') {
+            val = result.difficulty === 'beginner' && result.finishPosition === 1 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-inter-bot') {
+            val = result.difficulty === 'intermediate' && result.finishPosition === 1 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-adv-bot') {
+            val = result.difficulty === 'advanced' && result.finishPosition === 1 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-expert') {
             val = result.difficulty === 'expert' && result.finishPosition === 1 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-code') {
+            val = (result.passageTitle?.toLowerCase().includes('code') || result.accuracy >= 95) ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-literature') {
+            val = result.accuracy >= 95 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-long') {
+            const totalChars = (result.correctChars || 0) + (result.incorrectChars || 0);
+            val = totalChars >= 300 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-sprint') {
+            val = result.durationSeconds > 0 && result.durationSeconds <= 20 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-night') {
+            const hour = new Date().getHours();
+            val = hour >= 22 || hour <= 4 ? 1 : 0;
+          } else if (ach.id === 'ach-challenge-morning') {
+            const hour = new Date().getHours();
+            val = hour >= 5 && hour <= 9 ? 1 : 0;
+          }
+        } else if (ach.category === 'legendary') {
+          if (ach.id.startsWith('ach-level')) {
+            val = newLevel;
+          } else if (ach.id.startsWith('ach-collector')) {
+            val = unlockedCars.length;
+          } else if (ach.id === 'ach-legend-badge-master') {
+            val = unlockedBadges.length;
           }
         }
 
@@ -460,12 +511,29 @@ export class ApiService {
   }
 
   static getAchievements(): Achievement[] {
-    const saved = localStorage.getItem(STORAGE_KEYS.ACHIEVEMENTS);
-    if (!saved) {
-      localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(ACHIEVEMENTS_DATA));
-      return ACHIEVEMENTS_DATA;
-    }
-    return JSON.parse(saved);
+    const user = this.getUser();
+    const savedStr = localStorage.getItem(STORAGE_KEYS.ACHIEVEMENTS);
+    let saved: Achievement[] = savedStr ? JSON.parse(savedStr) : [];
+    const savedMap = new Map<string, Achievement>(saved.map((a) => [a.id, a]));
+
+    const merged: Achievement[] = ACHIEVEMENTS_DATA.map((def) => {
+      const existing = savedMap.get(def.id);
+      const isUnlockedInProfile = user.unlockedBadges?.includes(def.id);
+      if (existing) {
+        return {
+          ...def,
+          ...existing,
+          unlocked: existing.unlocked || !!isUnlockedInProfile,
+        };
+      }
+      return {
+        ...def,
+        unlocked: !!isUnlockedInProfile,
+      };
+    });
+
+    localStorage.setItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(merged));
+    return merged;
   }
 
   static getDailyChallenges(): DailyChallenge[] {

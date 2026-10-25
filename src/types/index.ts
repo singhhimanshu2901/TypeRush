@@ -63,6 +63,11 @@ export interface CarModel {
   bodyColor: string;
   stripeColor: string;
   accentColor: string;
+  headlightColor?: string;
+  neonGlowColor?: string;
+  bodyType: 'hatchback' | 'sedan' | 'coupe' | 'muscle' | 'sports' | 'supercar' | 'hypercar' | 'formula' | 'cyberpunk' | 'jet';
+  wingStyle: 'none' | 'ducktail' | 'spoiler' | 'high_wing' | 'carbon_blade' | 'active_aero' | 'f1_wing' | 'plasma_wings';
+  wheelStyle: 'steel' | 'alloy' | 'spoke' | 'deep_dish' | 'neon_ring' | 'gold_bbs' | 'plasma_disc';
   description: string;
   topSpeedMph: number;
   accelerationStat: number;
@@ -73,8 +78,8 @@ export interface Achievement {
   id: string;
   title: string;
   description: string;
-  category: 'speed' | 'accuracy' | 'wins' | 'streak' | 'races' | 'consistency' | 'challenges';
-  rarity: 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary';
+  category: 'speed' | 'accuracy' | 'wins' | 'streak' | 'races' | 'consistency' | 'challenges' | 'legendary';
+  rarity: 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic';
   targetValue: number;
   rewardXp: number;
   iconName: string;
@@ -82,6 +87,7 @@ export interface Achievement {
   unlocked: boolean;
   dateUnlocked?: string;
   minCharsRequired?: number;
+  minWpmRequired?: number;
 }
 
 export interface LeaderboardEntry {
