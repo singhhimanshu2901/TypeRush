@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { CAR_MODELS } from '../data/cars';
+import { getAvatarEmoji } from './UserAvatar';
 
 export interface ParticipantTrackData {
   id: string;
@@ -219,7 +220,8 @@ export const RaceTrackCanvas: React.FC<RaceTrackCanvasProps> = ({ participants, 
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = p.isUser ? '#f43f5e' : '#f3f4f6';
         ctx.textAlign = 'left';
-        ctx.fillText(`${p.avatar} ${p.name}`, currentCarX - 24, laneCenterY - 16);
+        const displayAvatarEmoji = getAvatarEmoji(p.avatar);
+        ctx.fillText(`${displayAvatarEmoji} ${p.name}`, currentCarX - 24, laneCenterY - 16);
 
         ctx.font = 'bold 10px sans-serif';
         ctx.fillStyle = '#38bdf8';

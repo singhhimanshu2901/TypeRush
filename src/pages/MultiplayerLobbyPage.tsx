@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MultiplayerRoom, Passage, RaceMode, Difficulty } from '../types';
 import { Users, Plus, ArrowRight, CheckCircle2, Play, LogOut, RefreshCw } from 'lucide-react';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface MultiplayerLobbyPageProps {
   user: User;
@@ -250,15 +251,20 @@ export const MultiplayerLobbyPage: React.FC<MultiplayerLobbyPageProps> = ({ user
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {activeRoom.players.map((p) => (
-                <div key={p.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{p.avatar}</span>
-                    <div>
-                      <div className="font-bold text-sm text-white">{p.username}</div>
+                <div key={p.id} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex items-center justify-between min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <UserAvatar
+                      avatar={p.avatar}
+                      alt={p.username}
+                      className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-lg shrink-0 overflow-hidden"
+                      textClassName="text-lg"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-sm text-white truncate max-w-[120px] sm:max-w-[150px]">{p.username}</div>
                       <div className="text-[10px] text-slate-500">Ready to Race</div>
                     </div>
                   </div>
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                 </div>
               ))}
             </div>

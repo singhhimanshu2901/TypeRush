@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, LeaderboardEntry } from '../types';
 import { Trophy, Medal, Crown, Search, RefreshCw } from 'lucide-react';
 import { ApiService } from '../services/api';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface LeaderboardPageProps {
   user: User;
@@ -101,21 +102,24 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({ user }) => {
                       )}
                     </td>
 
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-xl">
-                          {entry.avatar}
-                        </div>
-                        <div>
-                          <div className="font-bold text-white flex items-center gap-2">
-                            <span>{entry.username}</span>
+                    <td className="py-4 px-6 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <UserAvatar
+                          avatar={entry.avatar}
+                          alt={entry.username}
+                          className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-xl shrink-0 overflow-hidden"
+                          textClassName="text-xl"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-white flex items-center gap-2 min-w-0">
+                            <span className="truncate max-w-[120px] sm:max-w-[180px] md:max-w-[220px]">{entry.username}</span>
                             {isCurrentUser && (
-                              <span className="text-[10px] bg-rose-500 text-white px-1.5 py-0.5 rounded uppercase font-black">
+                              <span className="shrink-0 text-[10px] bg-rose-500 text-white px-1.5 py-0.5 rounded uppercase font-black">
                                 YOU
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-400 font-normal">{entry.title}</p>
+                          <p className="text-xs text-slate-400 font-normal truncate max-w-[140px] sm:max-w-[180px]">{entry.title}</p>
                         </div>
                       </div>
                     </td>

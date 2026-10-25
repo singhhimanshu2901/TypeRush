@@ -17,7 +17,7 @@ import { MultiplayerLobbyPage } from './pages/MultiplayerLobbyPage';
 import { useAuth } from './context/AuthContext';
 
 export function App() {
-  const { userProfile } = useAuth();
+  const { userProfile, refreshProfile } = useAuth();
   const [localUser, setLocalUser] = useState<User>(() => ApiService.getUser());
   const [activeTab, setActiveTab] = useState<string>('landing');
 
@@ -35,6 +35,7 @@ export function App() {
   const handleUserUpdate = async (updatedUser: User) => {
     await ApiService.updateUserProfile(updatedUser);
     setLocalUser(updatedUser);
+    await refreshProfile();
   };
 
   const handleLaunchRace = (mode: RaceMode, difficulty: Difficulty, passage: Passage, carId: string) => {
@@ -49,6 +50,7 @@ export function App() {
     setLastResult(result);
     const { user: updated } = await ApiService.saveRaceResult(result);
     setLocalUser(updated);
+    await refreshProfile();
     setActiveTab('result');
   };
 

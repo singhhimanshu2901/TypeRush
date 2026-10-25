@@ -4,7 +4,7 @@ import { RaceTrackCanvas, ParticipantTrackData } from '../components/RaceTrackCa
 import { TypingArea } from '../components/TypingArea';
 import { calculateGrossWpm, calculateNetWpm, calculateAccuracy, calculateXpEarned } from '../utils/typingEngine';
 import { ApiService } from '../services/api';
-import { Pause, Play, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Pause, Play, RotateCcw } from 'lucide-react';
 
 interface RacePageProps {
   user: User;
@@ -30,6 +30,11 @@ export const RacePage: React.FC<RacePageProps> = ({
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
 
+  // High precision timing and single-execution race finished guard
+  const raceIdRef = useRef<string>(`race-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`);
+  const raceFinishedRef = useRef<boolean>(false);
+  const startTimeRef = useRef<number | null>(null);
+
   // User Typing state
   const [userTyped, setUserTyped] = useState<string>('');
   const [correctCount, setCorrectCount] = useState<number>(0);
@@ -43,7 +48,6 @@ export const RacePage: React.FC<RacePageProps> = ({
 
   // AI Opponents Setup
   const [aiRacers, setAiRacers] = useState<AIRacer[]>([]);
-
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize AI Racers on Mount based on difficulty
@@ -111,43 +115,43 @@ export const RacePage: React.FC<RacePageProps> = ({
     } else if (countdown === 0) {
       setCountdown(null);
       setIsRacing(true);
+      startTimeRef.current = performance.now();
     }
   }, [countdown]);
 
   // Main Race Game Loop Timer
   useEffect(() => {
-    if (!isRacing || isPaused) return;
+    if (!isRacing || isPaused || raceFinishedRef.current) return;
 
     timerRef.current = setInterval(() => {
-      setElapsedTime((prev) => {
-        const nextTime = prev + 1;
+      if (startTimeRef.current === null) return;
 
-        // Recalculate WPM
-        const wpm = calculateNetWpm(correctCount, errorCount, nextTime);
-        setUserWpm(wpm);
+      const elapsedMs = performance.now() - startTimeRef.current;
+      const currentSeconds = Math.max(1, Math.floor(elapsedMs / 1000));
+      setElapsedTime(currentSeconds);
 
-        // Advance AI Opponents
-        if (mode !== 'solo') {
-          setAiRacers((prevBots) =>
-            prevBots.map((bot) => {
-              const totalCharsNeeded = passage.charCount;
-              // Human-like speed fluctuation
-              const wpmShift = (Math.random() - 0.5) * 8;
-              const currentBotSpeed = Math.max(10, bot.targetWpm + wpmShift);
-              const charsPerSec = (currentBotSpeed * 5) / 60;
-              const newProgress = Math.min(1.0, bot.currentProgress + charsPerSec / totalCharsNeeded);
+      // Recalculate live WPM
+      const wpm = calculateNetWpm(correctCount, errorCount, currentSeconds);
+      setUserWpm(wpm);
 
-              return {
-                ...bot,
-                currentProgress: newProgress,
-                currentWpm: Math.round(currentBotSpeed),
-              };
-            })
-          );
-        }
+      // Advance AI Opponents
+      if (mode !== 'solo') {
+        setAiRacers((prevBots) =>
+          prevBots.map((bot) => {
+            const totalCharsNeeded = passage.charCount;
+            const wpmShift = (Math.random() - 0.5) * 8;
+            const currentBotSpeed = Math.max(10, bot.targetWpm + wpmShift);
+            const charsPerSec = (currentBotSpeed * 5) / 60;
+            const newProgress = Math.min(1.0, bot.currentProgress + charsPerSec / totalCharsNeeded);
 
-        return nextTime;
-      });
+            return {
+              ...bot,
+              currentProgress: newProgress,
+              currentWpm: Math.round(currentBotSpeed),
+            };
+          })
+        );
+      }
     }, 1000);
 
     return () => {
@@ -157,7 +161,8 @@ export const RacePage: React.FC<RacePageProps> = ({
 
   // Handle Typing Input from TypingArea
   const handleTyped = (input: string, correct: number, errors: number, backspaces: number) => {
-    if (isPaused) return;
+    if (isPaused || raceFinishedRef.current) return;
+
     setUserTyped(input);
     setCorrectCount(correct);
     setErrorCount(errors);
@@ -166,7 +171,11 @@ export const RacePage: React.FC<RacePageProps> = ({
     const acc = calculateAccuracy(correct, input.length);
     setUserAccuracy(acc);
 
-    const currentWpm = calculateNetWpm(correct, errors, Math.max(1, elapsedTime));
+    const currentSecs = startTimeRef.current
+      ? Math.max(0.5, (performance.now() - startTimeRef.current) / 1000)
+      : Math.max(1, elapsedTime);
+
+    const currentWpm = calculateNetWpm(correct, errors, currentSecs);
     setUserWpm(currentWpm);
 
     if (acc > 95 && currentWpm > 40) {
@@ -176,15 +185,19 @@ export const RacePage: React.FC<RacePageProps> = ({
     }
   };
 
-  // Handle Race Finish
-  const handleFinish = () => {
-    if (!isRacing) return;
+  // Single-Execution Guaranteed Race Finish Handler
+  const handleFinish = async () => {
+    if (raceFinishedRef.current) return;
+    raceFinishedRef.current = true;
     setIsRacing(false);
+
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const duration = Math.max(1, elapsedTime);
-    const grossWpm = calculateGrossWpm(userTyped.length, duration);
-    const netWpm = calculateNetWpm(correctCount, errorCount, duration);
+    const exactMs = startTimeRef.current ? performance.now() - startTimeRef.current : elapsedTime * 1000;
+    const durationSeconds = Math.max(1, Math.round(exactMs / 1000));
+
+    const grossWpm = calculateGrossWpm(userTyped.length, durationSeconds);
+    const netWpm = calculateNetWpm(correctCount, errorCount, durationSeconds);
     const finalAccuracy = calculateAccuracy(correctCount, userTyped.length);
 
     // Determine final finish position
@@ -202,7 +215,7 @@ export const RacePage: React.FC<RacePageProps> = ({
     const xpEarned = calculateXpEarned(netWpm, finalAccuracy, position, difficulty === 'expert' ? 1.5 : 1.0);
 
     const result: RaceResult = {
-      id: `race-${Date.now()}`,
+      id: raceIdRef.current,
       userId: user.id,
       username: user.username,
       mode,
@@ -212,7 +225,7 @@ export const RacePage: React.FC<RacePageProps> = ({
       grossWpm,
       netWpm,
       accuracy: finalAccuracy,
-      durationSeconds: duration,
+      durationSeconds,
       correctChars: correctCount,
       incorrectChars: errorCount,
       backspaces: backspaceCount,
@@ -222,7 +235,6 @@ export const RacePage: React.FC<RacePageProps> = ({
       date: new Date().toISOString(),
     };
 
-    ApiService.saveRaceResult(result);
     onFinishRace(result);
   };
 
@@ -298,21 +310,21 @@ export const RacePage: React.FC<RacePageProps> = ({
       )}
 
       {/* Race Top Controls */}
-      <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <span className="font-extrabold text-sm text-white">{passage.title}</span>
-          <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-bold text-xs uppercase border border-rose-500/20">
+      <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-2xl min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-extrabold text-sm text-white truncate max-w-[200px] md:max-w-xs">{passage.title}</span>
+          <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-bold text-xs uppercase border border-rose-500/20 shrink-0">
             {difficulty}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setIsPaused(!isPaused)}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5"
           >
             {isPaused ? <Play className="w-4 h-4 fill-white" /> : <Pause className="w-4 h-4" />}
-            <span>{isPaused ? 'Resume' : 'Pause'}</span>
+            <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
 
           <button

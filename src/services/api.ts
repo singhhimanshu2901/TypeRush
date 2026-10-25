@@ -61,11 +61,18 @@ const DEFAULT_GUEST_USER: User = {
 export class ApiService {
   static getUser(): User {
     const saved = localStorage.getItem(STORAGE_KEYS.USER);
-    if (!saved) {
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(DEFAULT_GUEST_USER));
-      return DEFAULT_GUEST_USER;
+    let user: User = saved ? JSON.parse(saved) : { ...DEFAULT_GUEST_USER };
+
+    const races = this.getRaces();
+    if (races.length > 0) {
+      const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
+      if (maxRaceWpm > (user.bestWpm || 0)) {
+        user.bestWpm = maxRaceWpm;
+        user.totalRaces = Math.max(user.totalRaces || 0, races.length);
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      }
     }
-    return JSON.parse(saved);
+    return user;
   }
 
   static async updateUserProfile(updates: Partial<User>): Promise<User> {
@@ -104,6 +111,13 @@ export class ApiService {
     const currentUser = auth.currentUser;
     let user = this.getUser();
 
+    // Deduplication check: Do not re-process if result.id is already recorded
+    const races = this.getRaces();
+    if (races.some((r) => r.id === result.id)) {
+      console.warn(`[ApiService] Race ${result.id} already processed. Skipping duplicate save.`);
+      return { user, newAchievements: [] };
+    }
+
     // Verify race result metrics via server endpoint first
     try {
       const verifyRes = await fetch('/api/races/verify', {
@@ -131,15 +145,15 @@ export class ApiService {
     }
 
     // Calculate updated metrics
-    const races = this.getRaces();
     races.unshift(result);
     localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
 
     const totalRaces = races.length;
     const wins = races.filter((r) => r.finishPosition === 1).length;
-    const avgWpm = Math.round(races.reduce((acc, r) => acc + r.netWpm, 0) / totalRaces);
-    const bestWpm = Math.max(user.bestWpm, result.netWpm);
-    const avgAcc = Math.round((races.reduce((acc, r) => acc + r.accuracy, 0) / totalRaces) * 10) / 10;
+    const avgWpm = Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / totalRaces);
+    const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
+    const bestWpm = Math.max(user.bestWpm || 0, maxRaceWpm, result.netWpm || 0);
+    const avgAcc = Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / totalRaces) * 10) / 10;
 
     const newXp = user.xp + result.xpEarned;
     const newLevel = Math.floor(newXp / 500) + 1;
@@ -209,7 +223,7 @@ export class ApiService {
           updatedAt: serverTimestamp(),
         });
 
-        // Save race to subcollection
+        // Save race to subcollection using deterministic race ID
         const raceRef = doc(db, 'users', currentUser.uid, 'races', result.id);
         await setDoc(raceRef, {
           ...result,

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { Play, Gauge, Trophy, Zap, ShieldCheck, Flame, Users, ArrowRight } from 'lucide-react';
 import { ApiService } from '../services/api';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface LandingPageProps {
   user: User;
@@ -158,9 +159,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, onStartRace, onN
               key={driver.userId}
               className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex items-center gap-4"
             >
-              <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-2xl">
-                {driver.avatar}
-              </div>
+              <UserAvatar
+                avatar={driver.avatar}
+                alt={driver.username}
+                className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center text-2xl shrink-0 overflow-hidden"
+                textClassName="text-2xl"
+              />
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-white">{driver.username}</span>

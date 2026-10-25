@@ -3,6 +3,7 @@ import { User } from '../types';
 import { Trophy, Flame, Zap, Gauge, Car, Shield, User as UserIcon, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LoginModal } from './LoginModal';
+import { UserAvatar } from './UserAvatar';
 
 interface NavbarProps {
   user: User;
@@ -96,26 +97,22 @@ export const Navbar: React.FC<NavbarProps> = ({ user, activeTab, setActiveTab })
                 className="flex items-center gap-3 bg-slate-950/80 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-2xl transition-all text-left"
               >
                 <div className="relative">
-                  {currentUser.photoURL ? (
-                    <img
-                      src={currentUser.photoURL}
-                      alt={currentUser.displayName || 'User'}
-                      className="w-9 h-9 rounded-xl border border-rose-500 object-cover"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">
-                      {activeUser.avatar}
-                    </div>
-                  )}
-                  <span className="absolute -bottom-1 -right-1 bg-rose-600 text-white font-extrabold text-[9px] px-1 rounded-md border border-slate-900">
+                  <UserAvatar
+                    avatar={activeUser.avatar}
+                    photoURL={currentUser.photoURL}
+                    alt={activeUser.username}
+                    className="w-9 h-9 rounded-xl border border-rose-500 overflow-hidden bg-slate-900"
+                    textClassName="text-base"
+                  />
+                  <span className="absolute -bottom-1 -right-1 bg-rose-600 text-white font-extrabold text-[9px] px-1 rounded-md border border-slate-900 z-10">
                     L{activeUser.level}
                   </span>
                 </div>
 
-                <div className="hidden sm:block">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-xs text-slate-200">{activeUser.username}</span>
-                    <span className="text-[10px] font-semibold text-rose-400">{activeUser.bestWpm} WPM</span>
+                <div className="hidden sm:block min-w-0">
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <span className="font-bold text-xs text-slate-200 truncate max-w-[100px] md:max-w-[130px]">{activeUser.username}</span>
+                    <span className="text-[10px] font-semibold text-rose-400 shrink-0">{activeUser.bestWpm} WPM</span>
                   </div>
                   <div className="w-24 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
                     <div

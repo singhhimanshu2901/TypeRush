@@ -3,6 +3,7 @@ import { User, RaceResult } from '../types';
 import { Play, Gauge, Trophy, Flame, Target, Shield, ArrowUpRight, Award, Zap } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
 import { ApiService } from '../services/api';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface DashboardPageProps {
   user: User;
@@ -21,19 +22,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ user, onStartRace,
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-rose-950/40 border border-slate-800 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
         <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-600 to-amber-500 p-0.5 flex items-center justify-center shadow-lg shadow-rose-500/20">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-3xl">
-              {user.avatar}
-            </div>
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-600 to-amber-500 p-0.5 flex items-center justify-center shadow-lg shadow-rose-500/20 shrink-0">
+            <UserAvatar
+              avatar={user.avatar}
+              alt={user.username}
+              className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-3xl overflow-hidden"
+              textClassName="text-3xl"
+            />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl md:text-3xl font-black text-white">{user.username}</h1>
-              <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-extrabold text-xs border border-rose-500/20">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0">
+              <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px]">{user.username}</h1>
+              <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 font-extrabold text-xs border border-rose-500/20">
                 {user.title}
               </span>
             </div>
-            <p className="text-slate-400 text-sm font-medium mt-1">
+            <p className="text-slate-400 text-sm font-medium mt-1 truncate">
               Driver Level {user.level} &bull; {user.xp} Total XP
             </p>
           </div>

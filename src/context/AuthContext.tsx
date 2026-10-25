@@ -41,20 +41,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (snapshot.exists()) {
         const data = snapshot.data();
+        const races = ApiService.getRaces();
+        const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
+        const computedBestWpm = Math.max(data.bestWpm || 0, maxRaceWpm);
+
         const profile: User = {
           id: fbUser.uid,
           username: data.displayName || fbUser.displayName || 'Driver',
           email: fbUser.email || '',
-          avatar: data.photoURL || fbUser.photoURL || '🏎️',
+          avatar: fbUser.photoURL || data.photoURL || '🏎️',
           level: data.level || 1,
           xp: data.xp || 0,
           currentStreak: data.currentStreak || 1,
           longestStreak: data.longestStreak || 1,
           lastRaceDate: data.lastRaceDate || new Date().toISOString().split('T')[0],
-          totalRaces: data.totalRaces || 0,
-          totalWins: data.wins || 0,
+          totalRaces: Math.max(data.totalRaces || 0, races.length),
+          totalWins: data.wins ?? data.totalWins ?? 0,
           avgWpm: data.avgWpm || 0,
-          bestWpm: data.bestWpm || 0,
+          bestWpm: computedBestWpm,
           avgAccuracy: data.avgAccuracy || 100,
           equippedCarId: data.equippedCarId || 'car-apex-racer',
           unlockedCars: data.unlockedCars || ['car-apex-racer'],
@@ -66,7 +70,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Mirror to local storage for offline fast read
         localStorage.setItem('typerush_user', JSON.stringify(profile));
 
-        // Update public leaderboard entry (PII/email excluded for security)
+        // Sync back bestWpm if Firestore had 0
+        if ((data.bestWpm || 0) < computedBestWpm) {
+          await updateDoc(userRef, {
+            bestWpm: computedBestWpm,
+            totalRaces: profile.totalRaces,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        // Update public leaderboard entry
         await setDoc(doc(db, 'leaderboards', fbUser.uid), {
           uid: fbUser.uid,
           displayName: profile.username,
@@ -83,6 +96,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } else {
         // First-time user doc creation
+        const races = ApiService.getRaces();
+        const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
+
         const newProfile: User = {
           id: fbUser.uid,
           username: fbUser.displayName || 'Racer',
@@ -93,10 +109,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           currentStreak: 1,
           longestStreak: 1,
           lastRaceDate: new Date().toISOString().split('T')[0],
-          totalRaces: 0,
+          totalRaces: races.length,
           totalWins: 0,
           avgWpm: 0,
-          bestWpm: 0,
+          bestWpm: maxRaceWpm,
           avgAccuracy: 100,
           equippedCarId: 'car-apex-racer',
           unlockedCars: ['car-apex-racer'],

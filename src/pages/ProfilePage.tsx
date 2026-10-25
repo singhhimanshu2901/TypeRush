@@ -3,6 +3,7 @@ import { User } from '../types';
 import { ApiService } from '../services/api';
 import { User as UserIcon, Gauge, Trophy, Flame, Edit3, Save } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface ProfilePageProps {
   user: User;
@@ -30,9 +31,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative">
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <div className="relative">
-            <div className="w-24 h-24 rounded-3xl bg-slate-950 border-2 border-rose-500/40 flex items-center justify-center text-5xl shadow-inner">
-              {avatar}
-            </div>
+            <UserAvatar
+              avatar={avatar}
+              alt={user.username}
+              className="w-24 h-24 rounded-3xl bg-slate-950 border-2 border-rose-500/40 flex items-center justify-center text-5xl shadow-inner shrink-0 overflow-hidden"
+              textClassName="text-5xl"
+            />
             {isEditing && (
               <div className="absolute -bottom-2 -right-2 flex gap-1 bg-slate-900 border border-slate-700 p-1 rounded-xl">
                 {avatars.slice(0, 4).map((av) => (
@@ -44,33 +48,33 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
             )}
           </div>
 
-          <div className="space-y-2 text-center sm:text-left flex-1">
+          <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
             {isEditing ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-w-full">
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="bg-slate-950 border border-rose-500 font-black text-xl text-white px-3 py-1.5 rounded-xl outline-none"
+                  className="bg-slate-950 border border-rose-500 font-black text-xl text-white px-3 py-1.5 rounded-xl outline-none min-w-0 w-full"
                 />
                 <button
                   onClick={handleSave}
-                  className="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold"
+                  className="p-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold shrink-0"
                 >
                   <Save className="w-4 h-4" />
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-center sm:justify-start gap-3">
-                <h1 className="text-2xl md:text-3xl font-black text-white">{user.username}</h1>
-                <button onClick={() => setIsEditing(true)} className="text-slate-500 hover:text-white">
+              <div className="flex items-center justify-center sm:justify-start gap-3 min-w-0">
+                <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-[220px] sm:max-w-[320px] md:max-w-[420px]">{user.username}</h1>
+                <button onClick={() => setIsEditing(true)} className="text-slate-500 hover:text-white shrink-0">
                   <Edit3 className="w-4 h-4" />
                 </button>
               </div>
             )}
 
-            <p className="text-rose-400 font-extrabold text-xs uppercase tracking-wider">{user.title}</p>
-            <p className="text-slate-400 text-xs font-medium">Driver Level {user.level} &bull; {user.xp} Total XP</p>
+            <p className="text-rose-400 font-extrabold text-xs uppercase tracking-wider truncate">{user.title}</p>
+            <p className="text-slate-400 text-xs font-medium truncate">Driver Level {user.level} &bull; {user.xp} Total XP</p>
           </div>
         </div>
       </div>
