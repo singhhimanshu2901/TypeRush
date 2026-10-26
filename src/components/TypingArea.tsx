@@ -122,7 +122,13 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
     onTyped(value, correct, errors, backspaceCount);
 
-    if (value.length === text.length) {
+    if (value.length >= text.length && text.length > 0) {
+      console.log('[RaceDiag] TypingArea passage complete. Calling onFinish.', {
+        valueLength: value.length,
+        textLength: text.length,
+        correct,
+        errors,
+      });
       onFinish(value, correct, errors, backspaceCount);
     }
   };

@@ -217,9 +217,29 @@ export const RacePage: React.FC<RacePageProps> = ({
     }
   };
 
+  // Fail-Safe Completion Guard: Automatically finish race if userTyped reaches or exceeds passage length
+  useEffect(() => {
+    if (
+      isRacing &&
+      !raceFinishedRef.current &&
+      passage.text &&
+      passage.text.length > 0 &&
+      userTyped.length >= passage.text.length
+    ) {
+      console.log('[RaceDiag] Fail-safe completion triggered in RacePage useEffect.', {
+        userTypedLength: userTyped.length,
+        passageLength: passage.text.length,
+      });
+      handleFinish(userTyped, correctCount, errorCount, backspaceCount);
+    }
+  }, [userTyped, isRacing, passage.text, correctCount, errorCount, backspaceCount]);
+
   // Single-Execution Guaranteed Race Finish Handler
   const handleFinish = async (finalInput?: string, finalCorrect?: number, finalErrors?: number, finalBackspaces?: number) => {
-    if (raceFinishedRef.current) return;
+    if (raceFinishedRef.current) {
+      console.warn('[RaceDiag] handleFinish called but raceFinishedRef is already true. Guarding.');
+      return;
+    }
     raceFinishedRef.current = true;
     setIsRacing(false);
 
@@ -272,7 +292,12 @@ export const RacePage: React.FC<RacePageProps> = ({
       date: new Date().toISOString(),
     };
 
-    onFinishRace(result);
+    console.log('[RaceDiag] handleFinish constructed RaceResult. Invoking onFinishRace.', result);
+    try {
+      onFinishRace(result);
+    } catch (err) {
+      console.error('[RaceDiag] Error in onFinishRace callback:', err);
+    }
   };
 
   // Calculate user progress

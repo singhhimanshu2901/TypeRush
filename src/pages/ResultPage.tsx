@@ -12,12 +12,17 @@ interface ResultPageProps {
 
 export const ResultPage: React.FC<ResultPageProps> = ({ user, result, onRetry, onNavigate }) => {
   useEffect(() => {
+    console.log('[RaceDiag] ResultPage mounted with result:', result);
     if (result.finishPosition === 1) {
-      confetti({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.6 },
-      });
+      try {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 },
+        });
+      } catch (err) {
+        console.warn('[ResultPage] Confetti trigger skipped or restricted:', err);
+      }
     }
   }, [result]);
 

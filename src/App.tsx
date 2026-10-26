@@ -61,11 +61,13 @@ export function App() {
   };
 
   const handleFinishRace = async (result: RaceResult) => {
+    console.log('[RaceDiag] App handleFinishRace entry. Switching tab to result synchronously.', result);
     setLastResult(result);
     setActiveTab('result');
 
     try {
       const { user: updated } = await ApiService.saveRaceResult(result);
+      console.log('[RaceDiag] saveRaceResult completed successfully.', updated);
       setLocalUser(updated);
       try {
         await refreshProfile();
