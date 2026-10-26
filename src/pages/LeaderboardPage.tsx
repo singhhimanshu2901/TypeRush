@@ -44,7 +44,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({ user }) => {
 
   useEffect(() => {
     loadLeaderboard();
-  }, [loadLeaderboard]);
+  }, [loadLeaderboard, user.totalRaces, user.bestWpm, user.xp]);
 
   const filtered = leaderboardData.filter((entry) =>
     entry.username.toLowerCase().includes(search.toLowerCase())

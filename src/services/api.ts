@@ -809,45 +809,129 @@ export class ApiService {
     return JSON.parse(saved);
   }
 
+  // Explicit Leaderboard document synchronization helper
+  static async syncLeaderboardEntry(passedUser?: User): Promise<void> {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const user = passedUser || this.getUser();
+    try {
+      const lbRef = doc(db, 'leaderboards', currentUser.uid);
+      await setDoc(
+        lbRef,
+        {
+          uid: currentUser.uid,
+          displayName: user.username || currentUser.displayName || 'Driver',
+          avatar: user.avatar || currentUser.photoURL || '🏎️',
+          level: user.level || 1,
+          title: user.title || 'Rookie Driver',
+          bestWpm: user.bestWpm || 0,
+          avgAccuracy: user.avgAccuracy || 100,
+          totalWins: user.totalWins || 0,
+          totalRaces: user.totalRaces || 0,
+          xp: user.xp || 100,
+          equippedCarId: user.equippedCarId || 'car-apex-racer',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn(`[ApiService] Leaderboard doc sync failed for ${currentUser.uid}:`, err);
+    }
+  }
+
   // Synchronous Leaderboard getter for guest mode
   static getLeaderboard(): LeaderboardEntry[] {
     return this.getMockLeaderboard();
   }
 
-  // Async Cloud Leaderboard getter
+  // Async Cloud Leaderboard getter with automatic synchronization
   static async getLeaderboardFromCloud(): Promise<LeaderboardEntry[]> {
+    const currentUser = auth.currentUser;
+
+    // 1. Ensure current user's entry is synchronized/upserted in Firestore
+    if (currentUser) {
+      await this.syncLeaderboardEntry();
+    }
+
     try {
       const q = query(collection(db, 'leaderboards'), orderBy('bestWpm', 'desc'), limit(50));
       const snapshot = await getDocs(q);
 
-      if (snapshot.empty) {
-        return [];
+      const userMap = new Map<string, LeaderboardEntry>();
+
+      if (!snapshot.empty) {
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const uid = data.uid || docSnap.id;
+          const entry: LeaderboardEntry = {
+            rank: 0,
+            userId: uid,
+            username: data.displayName || data.username || (uid === currentUser?.uid ? ApiService.getUser().username : 'Driver'),
+            avatar: data.avatar || data.photoURL || '🏎️',
+            level: data.level || 1,
+            title: data.title || 'Rookie Driver',
+            bestWpm: data.bestWpm ?? data.averageWpm ?? data.wpm ?? 0,
+            avgAccuracy: data.avgAccuracy ?? data.averageAccuracy ?? data.accuracy ?? 100,
+            totalWins: data.totalWins ?? data.wins ?? 0,
+            totalRaces: data.totalRaces ?? 0,
+            xp: data.xp ?? data.totalXP ?? 0,
+            equippedCarId: data.equippedCarId || 'car-apex-racer',
+          };
+          userMap.set(uid, entry);
+        });
       }
 
-      const entries: LeaderboardEntry[] = [];
-      let rank = 1;
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        entries.push({
-          rank: rank++,
-          userId: docSnap.id,
-          username: data.displayName || 'Driver',
-          avatar: data.avatar || '🏎️',
-          level: data.level || 1,
-          title: data.title || 'Rookie Driver',
-          bestWpm: data.bestWpm || 0,
-          avgAccuracy: data.avgAccuracy || 100,
-          totalWins: data.totalWins || 0,
-          totalRaces: data.totalRaces || 0,
-          xp: data.xp || 0,
-          equippedCarId: data.equippedCarId || 'car-apex-racer',
+      // 2. Guarantee the active authenticated user is present in the results
+      if (currentUser && !userMap.has(currentUser.uid)) {
+        const u = ApiService.getUser();
+        userMap.set(currentUser.uid, {
+          rank: 0,
+          userId: currentUser.uid,
+          username: u.username || currentUser.displayName || 'Driver',
+          avatar: u.avatar || currentUser.photoURL || '🏎️',
+          level: u.level || 1,
+          title: u.title || 'Rookie Driver',
+          bestWpm: u.bestWpm || 0,
+          avgAccuracy: u.avgAccuracy || 100,
+          totalWins: u.totalWins || 0,
+          totalRaces: u.totalRaces || 0,
+          xp: u.xp || 100,
+          equippedCarId: u.equippedCarId || 'car-apex-racer',
         });
-      });
+      }
 
-      return entries;
+      const allEntries = Array.from(userMap.values());
+
+      // 3. Sort by bestWpm descending (primary) and xp descending (secondary)
+      allEntries.sort((a, b) => b.bestWpm - a.bestWpm || b.xp - a.xp);
+
+      // 4. Assign 1-based ranks
+      return allEntries.map((e, index) => ({
+        ...e,
+        rank: index + 1,
+      }));
     } catch (err) {
-      handleFirestoreError(err, 'list', 'leaderboards');
+      console.warn('[ApiService] Cloud leaderboard fetch failed. Using active profile fallback:', err);
+      if (currentUser) {
+        const u = ApiService.getUser();
+        return [
+          {
+            rank: 1,
+            userId: currentUser.uid,
+            username: u.username || 'Driver',
+            avatar: u.avatar || '🏎️',
+            level: u.level || 1,
+            title: u.title || 'Rookie Driver',
+            bestWpm: u.bestWpm || 0,
+            avgAccuracy: u.avgAccuracy || 100,
+            totalWins: u.totalWins || 0,
+            totalRaces: u.totalRaces || 0,
+            xp: u.xp || 100,
+            equippedCarId: u.equippedCarId || 'car-apex-racer',
+          },
+        ];
+      }
       return [];
     }
   }

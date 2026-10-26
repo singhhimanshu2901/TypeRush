@@ -250,4 +250,37 @@ describe('Data Persistence & XP Progression System', () => {
       expect(level).toBe(expectedLevel);
     });
   });
+
+  it('8. getLeaderboardFromCloud handles missing leaderboard docs and parses fallback schema fields', async () => {
+    const { auth } = await import('../../config/firebase');
+    (auth as any).currentUser = { uid: 'user-auth-777', displayName: 'AuthSpeedster' };
+
+    const mockDocs = [
+      {
+        id: 'other-user-1',
+        data: () => ({
+          displayName: 'RivalOne',
+          bestWpm: 88,
+          avgAccuracy: 97,
+          totalWins: 5,
+          totalRaces: 15,
+          xp: 2200,
+          level: 5,
+        }),
+      },
+    ];
+
+    const { getDocs } = await import('firebase/firestore');
+    vi.mocked(getDocs).mockResolvedValueOnce({
+      empty: false,
+      docs: mockDocs,
+      forEach: (cb: (doc: any) => void) => mockDocs.forEach(cb),
+    } as any);
+
+    const entries = await ApiService.getLeaderboardFromCloud();
+    expect(entries.length).toBeGreaterThanOrEqual(2); // Rival + Auth User
+    const authEntry = entries.find((e) => e.userId === 'user-auth-777');
+    expect(authEntry).toBeDefined();
+    expect(authEntry?.username).toBe('GuestDriver'); // Matches local storage user
+  });
 });
