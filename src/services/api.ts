@@ -212,17 +212,21 @@ export class ApiService {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        // 1. Reset Firestore user doc using setDoc merge
+        // 1. Reset Firestore user doc cleanly
         const userRef = doc(db, 'users', currentUser.uid);
         await setDoc(
           userRef,
           {
             uid: currentUser.uid,
+            displayName: resetUser.username,
+            email: resetUser.email || currentUser.email || '',
+            photoURL: resetUser.avatar,
             level: 1,
             xp: 100,
             currentStreak: 0,
             longestStreak: 0,
             lastRaceDate: null,
+            lastPlayedDate: null,
             totalRaces: 0,
             wins: 0,
             totalWins: 0,
@@ -263,7 +267,15 @@ export class ApiService {
         const racesSubcollRef = collection(db, 'users', currentUser.uid, 'races');
         const raceDocsSnap = await getDocs(racesSubcollRef);
         if (!raceDocsSnap.empty) {
-          await Promise.all(raceDocsSnap.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+          await Promise.all(
+            raceDocsSnap.docs.map(async (docSnap) => {
+              try {
+                await deleteDoc(docSnap.ref);
+              } catch (e) {
+                console.warn('[resetUserStats] Subcollection race doc delete skipped:', e);
+              }
+            })
+          );
         }
       } catch (err) {
         handleFirestoreError(err, 'reset', `users/${currentUser.uid}`);
@@ -855,7 +867,8 @@ export class ApiService {
     }
 
     try {
-      const q = query(collection(db, 'leaderboards'), orderBy('bestWpm', 'desc'), limit(50));
+      // Query without forcing server-side orderBy so Firestore never excludes documents missing bestWpm
+      const q = query(collection(db, 'leaderboards'), limit(100));
       const snapshot = await getDocs(q);
 
       const userMap = new Map<string, LeaderboardEntry>();
@@ -869,13 +882,13 @@ export class ApiService {
             userId: uid,
             username: data.displayName || data.username || (uid === currentUser?.uid ? ApiService.getUser().username : 'Driver'),
             avatar: data.avatar || data.photoURL || '🏎️',
-            level: data.level || 1,
+            level: Number(data.level ?? 1),
             title: data.title || 'Rookie Driver',
-            bestWpm: data.bestWpm ?? data.averageWpm ?? data.wpm ?? 0,
-            avgAccuracy: data.avgAccuracy ?? data.averageAccuracy ?? data.accuracy ?? 100,
-            totalWins: data.totalWins ?? data.wins ?? 0,
-            totalRaces: data.totalRaces ?? 0,
-            xp: data.xp ?? data.totalXP ?? 0,
+            bestWpm: Number(data.bestWpm ?? data.averageWpm ?? data.wpm ?? 0),
+            avgAccuracy: Number(data.avgAccuracy ?? data.averageAccuracy ?? data.accuracy ?? 100),
+            totalWins: Number(data.totalWins ?? data.wins ?? 0),
+            totalRaces: Number(data.totalRaces ?? data.races ?? 0),
+            xp: Number(data.xp ?? data.totalXP ?? 0),
             equippedCarId: data.equippedCarId || 'car-apex-racer',
           };
           userMap.set(uid, entry);
@@ -912,27 +925,8 @@ export class ApiService {
         rank: index + 1,
       }));
     } catch (err) {
-      console.warn('[ApiService] Cloud leaderboard fetch failed. Using active profile fallback:', err);
-      if (currentUser) {
-        const u = ApiService.getUser();
-        return [
-          {
-            rank: 1,
-            userId: currentUser.uid,
-            username: u.username || 'Driver',
-            avatar: u.avatar || '🏎️',
-            level: u.level || 1,
-            title: u.title || 'Rookie Driver',
-            bestWpm: u.bestWpm || 0,
-            avgAccuracy: u.avgAccuracy || 100,
-            totalWins: u.totalWins || 0,
-            totalRaces: u.totalRaces || 0,
-            xp: u.xp || 100,
-            equippedCarId: u.equippedCarId || 'car-apex-racer',
-          },
-        ];
-      }
-      return [];
+      console.error('[ApiService] Cloud leaderboard fetch failed:', err);
+      throw err;
     }
   }
 

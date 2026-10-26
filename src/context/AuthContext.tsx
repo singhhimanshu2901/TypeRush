@@ -52,43 +52,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (snapshot.exists()) {
         const data = snapshot.data();
+
+        // Calculate metrics strictly from cloud Firestore document and cloud race subcollection
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
-        const computedBestWpm = Math.max(data.bestWpm || 0, maxRaceWpm, isSameUser ? existingLocalUser.bestWpm || 0 : 0);
-        const computedTotalRaces = Math.max(data.totalRaces || 0, races.length, isSameUser ? existingLocalUser.totalRaces || 0 : 0);
-        const computedWins = Math.max(
-          data.wins ?? data.totalWins ?? 0,
-          races.filter((r) => r.finishPosition === 1).length,
-          isSameUser ? existingLocalUser.totalWins || 0 : 0
-        );
-        const computedXp = Math.max(data.xp || 0, isSameUser ? existingLocalUser.xp || 0 : 0);
-        const computedLevel = Math.max(data.level || 1, Math.floor(computedXp / 500) + 1);
+        const computedBestWpm = data.bestWpm !== undefined ? data.bestWpm : maxRaceWpm;
+        const computedTotalRaces = data.totalRaces !== undefined ? data.totalRaces : races.length;
+        const computedWins = data.wins ?? data.totalWins ?? races.filter((r) => r.finishPosition === 1).length;
+        const computedXp = data.xp !== undefined ? data.xp : 100;
+        const computedLevel = data.level !== undefined ? data.level : Math.floor(Math.max(0, computedXp) / 500) + 1;
 
-        const computedUnlockedCars = Array.from(
-          new Set([
-            ...(data.unlockedCars || ['car-apex-racer']),
-            ...(isSameUser ? existingLocalUser.unlockedCars || [] : []),
-          ])
-        );
+        const computedUnlockedCars = Array.isArray(data.unlockedCars) && data.unlockedCars.length > 0
+          ? data.unlockedCars
+          : ['car-apex-racer'];
 
-        const computedUnlockedBadges = Array.from(
-          new Set([
-            ...(data.unlockedBadges || []),
-            ...(isSameUser ? existingLocalUser.unlockedBadges || [] : []),
-          ])
-        );
+        const computedUnlockedBadges = Array.isArray(data.unlockedBadges)
+          ? data.unlockedBadges
+          : [];
 
-        const computedAvgWpm =
-          races.length > 0
-            ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
-            : data.avgWpm || (isSameUser ? existingLocalUser.avgWpm : 0);
+        const computedAvgWpm = races.length > 0
+          ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
+          : data.avgWpm || 0;
 
-        const computedAvgAcc =
-          races.length > 0
-            ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
-            : data.avgAccuracy || (isSameUser ? existingLocalUser.avgAccuracy : 100);
+        const computedAvgAcc = races.length > 0
+          ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
+          : data.avgAccuracy || 100;
 
-        const computedEquippedCarId =
-          data.equippedCarId || (isSameUser ? existingLocalUser.equippedCarId : null) || 'car-apex-racer';
+        const computedEquippedCarId = data.equippedCarId || 'car-apex-racer';
 
         const initialProfile: User = {
           id: fbUser.uid,
@@ -97,13 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           avatar: fbUser.photoURL || data.photoURL || (isSameUser ? existingLocalUser.avatar : null) || '🏎️',
           level: computedLevel,
           xp: computedXp,
-          currentStreak: Math.max(data.currentStreak || 1, isSameUser ? existingLocalUser.currentStreak || 1 : 1),
-          longestStreak: Math.max(data.longestStreak || 1, isSameUser ? existingLocalUser.longestStreak || 1 : 1),
-          lastRaceDate:
-            data.lastRaceDate ||
-            data.lastPlayedDate ||
-            (isSameUser ? existingLocalUser.lastRaceDate : null) ||
-            new Date().toISOString().split('T')[0],
+          currentStreak: data.currentStreak ?? 0,
+          longestStreak: data.longestStreak ?? 0,
+          lastRaceDate: data.lastRaceDate || data.lastPlayedDate || null,
           totalRaces: computedTotalRaces,
           totalWins: computedWins,
           avgWpm: computedAvgWpm,
@@ -112,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           equippedCarId: computedEquippedCarId,
           unlockedCars: computedUnlockedCars,
           unlockedBadges: computedUnlockedBadges,
-          title: data.title || (isSameUser ? existingLocalUser.title : null) || 'Rookie Driver',
+          title: data.title || 'Rookie Driver',
         };
 
         // Evaluate achievements dynamically from restored stats and race history

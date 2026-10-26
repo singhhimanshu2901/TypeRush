@@ -283,4 +283,45 @@ describe('Data Persistence & XP Progression System', () => {
     expect(authEntry).toBeDefined();
     expect(authEntry?.username).toBe('GuestDriver'); // Matches local storage user
   });
+
+  it('9. resetUserStats resets user profile, leaderboard document, and local storage state completely', async () => {
+    // Populate dummy local data first
+    const race1: RaceResult = {
+      id: 'race-reset-1',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'pass-1',
+      passageTitle: 'Test Passage 1',
+      grossWpm: 90,
+      netWpm: 88,
+      accuracy: 99,
+      durationSeconds: 20,
+      correctChars: 150,
+      incorrectChars: 1,
+      backspaces: 1,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 300,
+      date: new Date().toISOString(),
+    };
+
+    await ApiService.saveRaceResult(race1);
+    const beforeReset = ApiService.getUser();
+    expect(beforeReset.totalRaces).toBe(1);
+    expect(beforeReset.xp).toBeGreaterThan(100);
+
+    const resetUser = await ApiService.resetUserStats();
+    expect(resetUser.totalRaces).toBe(0);
+    expect(resetUser.totalWins).toBe(0);
+    expect(resetUser.xp).toBe(100);
+    expect(resetUser.level).toBe(1);
+    expect(resetUser.bestWpm).toBe(0);
+    expect(resetUser.unlockedCars).toEqual(['car-apex-racer']);
+    expect(resetUser.unlockedBadges).toEqual([]);
+
+    const savedRaces = ApiService.getRaces();
+    expect(savedRaces).toHaveLength(0);
+  });
 });
