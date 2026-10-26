@@ -40,16 +40,23 @@ export function App() {
   }, [activeUser.equippedCarId]);
 
   const handleUserUpdate = async (updatedUser: User) => {
+    console.log('[RaceDiag] handleUserUpdate entry in App.tsx:', updatedUser);
     try {
       await ApiService.updateUserProfile(updatedUser);
+      console.log('[RaceDiag] ApiService.updateUserProfile resolved in handleUserUpdate.');
     } catch (err) {
-      console.error('[App] Failed to update user profile in Firestore:', err);
+      console.error('[RaceDiag] Failed to update user profile in Firestore:', err);
     }
     setLocalUser(updatedUser);
     if (updatedUser.equippedCarId) {
       setRaceCarId(updatedUser.equippedCarId);
     }
-    await refreshProfile();
+    try {
+      await refreshProfile();
+      console.log('[RaceDiag] refreshProfile completed in handleUserUpdate.');
+    } catch (err) {
+      console.warn('[RaceDiag] refreshProfile error in handleUserUpdate:', err);
+    }
   };
 
   const handleLaunchRace = (mode: RaceMode, difficulty: Difficulty, passage: Passage, carId?: string) => {

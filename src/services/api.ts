@@ -23,6 +23,23 @@ const STORAGE_KEYS = {
   CHALLENGES: 'typerush_challenges',
 };
 
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number = 8000,
+  errorMsg: string = 'Operation timed out'
+): Promise<T> {
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMsg));
+    }, ms);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
 export function handleFirestoreError(error: unknown, operationType: string, path: string | null) {
   const errInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -190,6 +207,7 @@ export class ApiService {
 
   // Reset Stats feature
   static async resetUserStats(): Promise<User> {
+    console.log('[RaceDiag] resetUserStats called');
     const current = this.getUser();
     const resetUser: User = {
       ...current,
@@ -212,72 +230,84 @@ export class ApiService {
     const currentUser = auth.currentUser;
     if (currentUser) {
       try {
-        // 1. Reset Firestore user doc cleanly
+        console.log('[RaceDiag] Resetting user profile and leaderboard in Firestore for:', currentUser.uid);
         const userRef = doc(db, 'users', currentUser.uid);
-        await setDoc(
-          userRef,
-          {
-            uid: currentUser.uid,
-            displayName: resetUser.username,
-            email: resetUser.email || currentUser.email || '',
-            photoURL: resetUser.avatar,
-            level: 1,
-            xp: 100,
-            currentStreak: 0,
-            longestStreak: 0,
-            lastRaceDate: null,
-            lastPlayedDate: null,
-            totalRaces: 0,
-            wins: 0,
-            totalWins: 0,
-            avgWpm: 0,
-            bestWpm: 0,
-            avgAccuracy: 100,
-            equippedCarId: 'car-apex-racer',
-            unlockedCars: ['car-apex-racer'],
-            unlockedBadges: [],
-            title: 'Rookie Driver',
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        // 2. Reset public leaderboard doc
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
-        await setDoc(
-          lbRef,
-          {
-            uid: currentUser.uid,
-            displayName: resetUser.username,
-            avatar: resetUser.avatar,
-            level: 1,
-            title: 'Rookie Driver',
-            bestWpm: 0,
-            avgAccuracy: 100,
-            totalWins: 0,
-            totalRaces: 0,
-            xp: 100,
-            equippedCarId: 'car-apex-racer',
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
+
+        await withTimeout(
+          Promise.all([
+            setDoc(
+              userRef,
+              {
+                uid: currentUser.uid,
+                displayName: resetUser.username,
+                email: resetUser.email || currentUser.email || '',
+                photoURL: resetUser.avatar,
+                level: 1,
+                xp: 100,
+                currentStreak: 0,
+                longestStreak: 0,
+                lastRaceDate: null,
+                lastPlayedDate: null,
+                totalRaces: 0,
+                wins: 0,
+                totalWins: 0,
+                avgWpm: 0,
+                bestWpm: 0,
+                avgAccuracy: 100,
+                equippedCarId: 'car-apex-racer',
+                unlockedCars: ['car-apex-racer'],
+                unlockedBadges: [],
+                title: 'Rookie Driver',
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            ),
+            setDoc(
+              lbRef,
+              {
+                uid: currentUser.uid,
+                displayName: resetUser.username,
+                avatar: resetUser.avatar,
+                level: 1,
+                title: 'Rookie Driver',
+                bestWpm: 0,
+                avgAccuracy: 100,
+                totalWins: 0,
+                totalRaces: 0,
+                xp: 100,
+                equippedCarId: 'car-apex-racer',
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            ),
+          ]),
+          6000,
+          'Firestore user profile and leaderboard reset timed out.'
         );
 
-        // 3. Clear user's race records in subcollection
+        console.log('[RaceDiag] Clearing user races subcollection in Firestore');
         const racesSubcollRef = collection(db, 'users', currentUser.uid, 'races');
-        const raceDocsSnap = await getDocs(racesSubcollRef);
-        if (!raceDocsSnap.empty) {
+        const raceDocsSnap = await withTimeout(
+          getDocs(racesSubcollRef),
+          5000,
+          'Fetching subcollection races for deletion timed out.'
+        ).catch(() => null);
+
+        if (raceDocsSnap && !raceDocsSnap.empty) {
           await Promise.all(
             raceDocsSnap.docs.map(async (docSnap) => {
               try {
-                await deleteDoc(docSnap.ref);
+                await withTimeout(deleteDoc(docSnap.ref), 3000, 'Subcollection delete timed out');
               } catch (e) {
                 console.warn('[resetUserStats] Subcollection race doc delete skipped:', e);
               }
             })
           );
         }
+        console.log('[RaceDiag] Firestore reset completed successfully.');
       } catch (err) {
+        console.error('[RaceDiag] Firestore reset encountered error:', err);
         handleFirestoreError(err, 'reset', `users/${currentUser.uid}`);
       }
     }
@@ -298,6 +328,7 @@ export class ApiService {
     );
     localStorage.setItem(STORAGE_KEYS.CHALLENGES, JSON.stringify(DAILY_CHALLENGES_DEFAULT));
 
+    console.log('[RaceDiag] Local storage reset completed.');
     return resetUser;
   }
 
@@ -566,11 +597,18 @@ export class ApiService {
     if (!uid) return this.getRaces();
 
     try {
+      console.log('[RaceDiag] Fetching cloud races for uid:', uid);
       const racesSubcollRef = collection(db, 'users', uid, 'races');
-      const snap = await getDocs(racesSubcollRef);
+      const snap = await withTimeout(
+        getDocs(racesSubcollRef),
+        6000,
+        'Fetching cloud races timed out.'
+      );
 
       if (snap.empty) {
-        return this.getRaces();
+        console.log('[RaceDiag] Cloud races snapshot is empty.');
+        localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify([]));
+        return [];
       }
 
       const races: RaceResult[] = [];
@@ -828,27 +866,33 @@ export class ApiService {
 
     const user = passedUser || this.getUser();
     try {
+      console.log('[RaceDiag] syncLeaderboardEntry executing for:', currentUser.uid);
       const lbRef = doc(db, 'leaderboards', currentUser.uid);
-      await setDoc(
-        lbRef,
-        {
-          uid: currentUser.uid,
-          displayName: user.username || currentUser.displayName || 'Driver',
-          avatar: user.avatar || currentUser.photoURL || '🏎️',
-          level: user.level || 1,
-          title: user.title || 'Rookie Driver',
-          bestWpm: user.bestWpm || 0,
-          avgAccuracy: user.avgAccuracy || 100,
-          totalWins: user.totalWins || 0,
-          totalRaces: user.totalRaces || 0,
-          xp: user.xp || 100,
-          equippedCarId: user.equippedCarId || 'car-apex-racer',
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
+      await withTimeout(
+        setDoc(
+          lbRef,
+          {
+            uid: currentUser.uid,
+            displayName: user.username || currentUser.displayName || 'Driver',
+            avatar: user.avatar || currentUser.photoURL || '🏎️',
+            level: user.level || 1,
+            title: user.title || 'Rookie Driver',
+            bestWpm: user.bestWpm || 0,
+            avgAccuracy: user.avgAccuracy || 100,
+            totalWins: user.totalWins || 0,
+            totalRaces: user.totalRaces || 0,
+            xp: user.xp || 100,
+            equippedCarId: user.equippedCarId || 'car-apex-racer',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        ),
+        5000,
+        'Syncing leaderboard entry timed out.'
       );
+      console.log('[RaceDiag] syncLeaderboardEntry succeeded.');
     } catch (err) {
-      console.warn(`[ApiService] Leaderboard doc sync failed for ${currentUser.uid}:`, err);
+      console.warn(`[RaceDiag] Leaderboard doc sync non-fatal error for ${currentUser.uid}:`, err);
     }
   }
 
@@ -859,17 +903,26 @@ export class ApiService {
 
   // Async Cloud Leaderboard getter with automatic synchronization
   static async getLeaderboardFromCloud(): Promise<LeaderboardEntry[]> {
+    console.log('[RaceDiag] getLeaderboardFromCloud called');
     const currentUser = auth.currentUser;
 
     // 1. Ensure current user's entry is synchronized/upserted in Firestore
     if (currentUser) {
-      await this.syncLeaderboardEntry();
+      await this.syncLeaderboardEntry().catch((err) =>
+        console.warn('[RaceDiag] syncLeaderboardEntry catch inside getLeaderboardFromCloud:', err)
+      );
     }
 
     try {
+      console.log('[RaceDiag] Querying leaderboards collection in Firestore...');
       // Query without forcing server-side orderBy so Firestore never excludes documents missing bestWpm
       const q = query(collection(db, 'leaderboards'), limit(100));
-      const snapshot = await getDocs(q);
+      const snapshot = await withTimeout(
+        getDocs(q),
+        7000,
+        'Firestore leaderboard query timed out. Please check your network connection.'
+      );
+      console.log('[RaceDiag] Leaderboard snapshot retrieved. Total docs:', snapshot.size);
 
       const userMap = new Map<string, LeaderboardEntry>();
 

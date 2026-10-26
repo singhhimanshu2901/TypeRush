@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ApiService } from '../services/api';
+import { ApiService, withTimeout } from '../services/api';
 import { Edit3, Save, X, Loader2, CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
 import { UserAvatar } from '../components/UserAvatar';
@@ -89,13 +89,25 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
     setResetError(null);
 
     try {
-      const resetUser = await ApiService.resetUserStats();
-      await onUserUpdate(resetUser);
+      console.log('[RaceDiag] handleConfirmReset entry. Resetting user stats...');
+      const resetUser = await withTimeout(
+        ApiService.resetUserStats(),
+        10000,
+        'Reset operation timed out. Please check your connection and try again.'
+      );
 
+      console.log('[RaceDiag] Calling onUserUpdate with resetUser profile...');
+      await withTimeout(
+        Promise.resolve(onUserUpdate(resetUser)),
+        8000,
+        'Profile update after reset timed out.'
+      );
+
+      console.log('[RaceDiag] Reset process completed successfully.');
       setSaveSuccess('All driving statistics and race history have been successfully reset.');
       setShowResetModal(false);
     } catch (err: unknown) {
-      console.error('[ProfilePage] Error resetting stats:', err);
+      console.error('[RaceDiag] Error resetting stats in ProfilePage:', err);
       setResetError(
         err instanceof Error ? err.message : 'Failed to reset statistics. Please try again.'
       );

@@ -20,25 +20,30 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({ user }) => {
     setIsLoading(true);
     setError(null);
 
-    // Guest Mode
-    if (!authLoading && !currentUser) {
-      setLeaderboardData(ApiService.getMockLeaderboard());
-      setIsLoading(false);
+    if (authLoading) {
+      console.log('[RaceDiag] Leaderboard load deferred: auth is still initializing');
       return;
     }
 
-    // Authenticated Mode - Fetch strictly from Cloud Firestore
-    if (currentUser) {
-      try {
+    try {
+      if (!currentUser) {
+        console.log('[RaceDiag] Leaderboard loading mock data for guest mode');
+        setLeaderboardData(ApiService.getMockLeaderboard());
+      } else {
+        console.log('[RaceDiag] Leaderboard loading cloud data for authenticated user:', currentUser.uid);
         const cloudEntries = await ApiService.getLeaderboardFromCloud();
         setLeaderboardData(cloudEntries);
-      } catch (err: unknown) {
-        console.error('[LeaderboardPage] Error loading cloud standings:', err);
-        setError('Unable to load Cloud Firestore leaderboard standings. Please check your connection and retry.');
-        setLeaderboardData([]);
-      } finally {
-        setIsLoading(false);
       }
+    } catch (err: unknown) {
+      console.error('[RaceDiag] Error loading cloud standings in LeaderboardPage:', err);
+      setError(
+        err instanceof Error
+          ? `Unable to load Cloud Firestore leaderboard standings: ${err.message}`
+          : 'Unable to load Cloud Firestore leaderboard standings. Please check your connection and retry.'
+      );
+      setLeaderboardData([]);
+    } finally {
+      setIsLoading(false);
     }
   }, [currentUser, authLoading]);
 
