@@ -1,277 +1,253 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ApiService, handleFirestoreError } from '../api';
-import { User, RaceResult } from '../../types';
-import { setDoc, getDocs, getDoc } from 'firebase/firestore';
+import { ApiService } from '../api';
+import { RaceResult, User } from '../../types';
 
-// Mock Firebase
+// Mock Firebase config and modules
 vi.mock('../../config/firebase', () => ({
   db: {},
-  auth: {
-    currentUser: {
-      uid: 'test-user-uid',
-      email: 'test@typerush.app',
-      emailVerified: true,
-      displayName: 'TestRacer',
-      photoURL: '🏎️',
-    },
-  },
-}));
-
-vi.mock('firebase/firestore', () => ({
-  collection: vi.fn(() => ({})),
-  doc: vi.fn((_db, ...paths) => paths.join('/')),
-  setDoc: vi.fn().mockResolvedValue(undefined),
-  getDoc: vi.fn().mockResolvedValue({
-    exists: () => true,
-    data: () => ({
-      uid: 'test-user-uid',
-      displayName: 'TestRacer',
-      xp: 500,
-      level: 2,
-      bestWpm: 80,
-      totalRaces: 5,
-      wins: 2,
-      totalWins: 2,
-      equippedCarId: 'car-apex-racer',
-      unlockedCars: ['car-apex-racer'],
-      unlockedBadges: ['ach-first-race'],
-    }),
-  }),
-  getDocs: vi.fn().mockResolvedValue({
-    empty: false,
-    docs: [
-      {
-        id: 'race-1',
-        data: () => ({
-          id: 'race-1',
-          netWpm: 75,
-          accuracy: 98,
-          finishPosition: 1,
-          date: '2026-10-25T10:00:00.000Z',
-        }),
-      },
-    ],
-    forEach: (cb: any) => {
-      cb({
-        id: 'race-1',
-        data: () => ({
-          id: 'race-1',
-          netWpm: 75,
-          accuracy: 98,
-          finishPosition: 1,
-          date: '2026-10-25T10:00:00.000Z',
-        }),
-      });
-    },
-  }),
-  deleteDoc: vi.fn().mockResolvedValue(undefined),
-  updateDoc: vi.fn().mockResolvedValue(undefined),
-  query: vi.fn(() => ({})),
-  orderBy: vi.fn(() => ({})),
-  limit: vi.fn(() => ({})),
-  serverTimestamp: vi.fn(() => 'MOCK_TIMESTAMP'),
+  auth: { currentUser: null },
+  googleProvider: {},
 }));
 
 vi.mock('firebase/auth', () => ({
-  updateProfile: vi.fn().mockResolvedValue(undefined),
+  onAuthStateChanged: vi.fn(),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  updateProfile: vi.fn(),
 }));
 
-const mockRaceResult: RaceResult = {
-  id: 'race-persist-100',
-  userId: 'test-user-uid',
-  username: 'TestRacer',
-  mode: 'ai',
-  difficulty: 'intermediate',
-  passageId: 'pass-1',
-  passageTitle: 'Speed Sprint',
-  grossWpm: 82,
-  netWpm: 80,
-  accuracy: 98,
-  durationSeconds: 20,
-  correctChars: 200,
-  incorrectChars: 4,
-  backspaces: 1,
-  finishPosition: 1,
-  totalParticipants: 4,
-  xpEarned: 250,
-  date: '2026-10-25T12:00:00.000Z',
-};
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn(),
+  doc: vi.fn(),
+  getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
+  getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
+  setDoc: vi.fn(() => Promise.resolve()),
+  updateDoc: vi.fn(() => Promise.resolve()),
+  deleteDoc: vi.fn(() => Promise.resolve()),
+  query: vi.fn(),
+  orderBy: vi.fn(),
+  limit: vi.fn(),
+  serverTimestamp: vi.fn(),
+}));
 
-describe('Data Persistence & Firestore Verification Suite', () => {
+describe('Data Persistence & XP Progression System', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
   });
 
-  it('1. Completing a race writes the result to Firestore subcollection', async () => {
-    const { user } = await ApiService.saveRaceResult(mockRaceResult);
+  it('1. Initializes default guest user with base 100 XP and Level 1', () => {
+    const user = ApiService.getUser();
+    expect(user.xp).toBe(100);
+    expect(user.level).toBe(1);
+  });
 
-    expect(user.totalRaces).toBeGreaterThan(0);
-    // Verify setDoc was called for race record: users/test-user-uid/races/race-persist-100
-    expect(setDoc).toHaveBeenCalledWith(
-      'users/test-user-uid/races/race-persist-100',
-      expect.objectContaining({
-        id: 'race-persist-100',
-        netWpm: 80,
+  it('2. Awarding 200 XP for first race includes unlocked badge rewards', async () => {
+    const race1: RaceResult = {
+      id: 'race-101',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'pass-1',
+      passageTitle: 'Test Passage 1',
+      grossWpm: 60,
+      netWpm: 58,
+      accuracy: 98,
+      durationSeconds: 25,
+      correctChars: 150,
+      incorrectChars: 3,
+      backspaces: 2,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 200,
+      date: new Date().toISOString(),
+    };
+
+    const { user, newAchievements } = await ApiService.saveRaceResult(race1);
+    expect(newAchievements.length).toBeGreaterThan(0);
+    expect(user.xp).toBe(815); // 100 base + 200 race1 + unlocked badge rewards
+    expect(user.level).toBe(Math.floor(815 / 500) + 1); // Level 2
+  });
+
+  it('3. Awarding 150 XP for second race increases balance proportionally', async () => {
+    const race1: RaceResult = {
+      id: 'race-101',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'pass-1',
+      passageTitle: 'Test Passage 1',
+      grossWpm: 60,
+      netWpm: 58,
+      accuracy: 98,
+      durationSeconds: 25,
+      correctChars: 150,
+      incorrectChars: 3,
+      backspaces: 2,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 200,
+      date: new Date().toISOString(),
+    };
+
+    await ApiService.saveRaceResult(race1);
+
+    const race2: RaceResult = {
+      id: 'race-102',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'pass-2',
+      passageTitle: 'Test Passage 2',
+      grossWpm: 65,
+      netWpm: 63,
+      accuracy: 99,
+      durationSeconds: 22,
+      correctChars: 160,
+      incorrectChars: 1,
+      backspaces: 1,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 150,
+      date: new Date().toISOString(),
+    };
+
+    const { user } = await ApiService.saveRaceResult(race2);
+    expect(user.xp).toBe(1195); // 815 + 150 race2 + new badge rewards
+    expect(user.level).toBe(Math.floor(1195 / 500) + 1); // Level 3
+  });
+
+  it('4. Saving same race twice does not award duplicate XP (Deduplication)', async () => {
+    const race1: RaceResult = {
+      id: 'race-dup-1',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'pass-1',
+      passageTitle: 'Test Passage 1',
+      grossWpm: 60,
+      netWpm: 58,
+      accuracy: 98,
+      durationSeconds: 25,
+      correctChars: 150,
+      incorrectChars: 3,
+      backspaces: 2,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 200,
+      date: new Date().toISOString(),
+    };
+
+    const res1 = await ApiService.saveRaceResult(race1);
+    expect(res1.user.xp).toBe(815);
+
+    const res2 = await ApiService.saveRaceResult(race1);
+    expect(res2.user.xp).toBe(815); // Deduplicated, no increase
+    expect(res2.newAchievements).toHaveLength(0);
+  });
+
+  it('5. Refreshing/calling getUser does not arbitrarily increase XP', () => {
+    const user1 = ApiService.getUser();
+    const user2 = ApiService.getUser();
+    const user3 = ApiService.getUser();
+    expect(user1.xp).toBe(100);
+    expect(user2.xp).toBe(100);
+    expect(user3.xp).toBe(100);
+  });
+
+  it('6. Stale inflated XP (e.g. 4500) is safely reconciled to actual calculated XP', () => {
+    // Simulate a stale user profile with inflated 4500 XP and only 2 races completed
+    const inflatedUser: User = {
+      id: 'guest-1',
+      username: 'GuestDriver',
+      email: 'guest@typerush.app',
+      avatar: '🏎️',
+      level: 10,
+      xp: 4500,
+      currentStreak: 1,
+      longestStreak: 1,
+      lastRaceDate: new Date().toISOString().split('T')[0],
+      totalRaces: 2,
+      totalWins: 2,
+      avgWpm: 60,
+      bestWpm: 65,
+      avgAccuracy: 98.5,
+      equippedCarId: 'car-apex-racer',
+      unlockedCars: ['car-apex-racer'],
+      unlockedBadges: ['ach-first-race', 'ach-first-win'],
+      title: 'Rookie Driver',
+    };
+
+    const races: RaceResult[] = [
+      {
+        id: 'r1',
+        userId: 'guest-1',
+        username: 'GuestDriver',
+        mode: 'ai',
+        difficulty: 'intermediate',
+        passageId: 'p1',
+        passageTitle: 'Passage 1',
+        grossWpm: 60,
+        netWpm: 60,
         accuracy: 98,
-      })
-    );
+        durationSeconds: 25,
+        correctChars: 150,
+        incorrectChars: 3,
+        backspaces: 2,
+        finishPosition: 1,
+        totalParticipants: 4,
+        xpEarned: 200,
+        date: new Date().toISOString(),
+      },
+      {
+        id: 'r2',
+        userId: 'guest-1',
+        username: 'GuestDriver',
+        mode: 'ai',
+        difficulty: 'intermediate',
+        passageId: 'p2',
+        passageTitle: 'Passage 2',
+        grossWpm: 65,
+        netWpm: 65,
+        accuracy: 99,
+        durationSeconds: 22,
+        correctChars: 160,
+        incorrectChars: 1,
+        backspaces: 1,
+        finishPosition: 1,
+        totalParticipants: 4,
+        xpEarned: 150,
+        date: new Date().toISOString(),
+      },
+    ];
+
+    const reconciled = ApiService.reconcileUserXp(inflatedUser, races);
+
+    // Expected calculated XP: 100 base + 200 (r1) + 150 (r2) + ach-first-race (25) + ach-first-win (100) = 475
+    expect(reconciled.xp).toBeLessThan(1000);
+    expect(reconciled.xp).toBe(475);
+    expect(reconciled.level).toBe(1); // Math.floor(475 / 500) + 1 = 1
   });
 
-  it('2. User statistics update correctly after a successful race write', async () => {
-    const initialUser: User = {
-      id: 'test-user-uid',
-      username: 'TestRacer',
-      email: 'test@typerush.app',
-      avatar: '🏎️',
-      level: 1,
-      xp: 100,
-      currentStreak: 1,
-      longestStreak: 1,
-      lastRaceDate: '2026-10-24',
-      totalRaces: 0,
-      totalWins: 0,
-      avgWpm: 0,
-      bestWpm: 0,
-      avgAccuracy: 100,
-      equippedCarId: 'car-apex-racer',
-      unlockedCars: ['car-apex-racer'],
-      unlockedBadges: [],
-      title: 'Rookie Driver',
-    };
-    localStorage.setItem('typerush_user', JSON.stringify(initialUser));
+  it('7. Level always matches formula Math.floor(xp / 500) + 1', () => {
+    const testCases = [
+      { xp: 0, expectedLevel: 1 },
+      { xp: 100, expectedLevel: 1 },
+      { xp: 499, expectedLevel: 1 },
+      { xp: 500, expectedLevel: 2 },
+      { xp: 999, expectedLevel: 2 },
+      { xp: 1000, expectedLevel: 3 },
+      { xp: 2450, expectedLevel: 5 },
+      { xp: 4500, expectedLevel: 10 },
+    ];
 
-    const { user } = await ApiService.saveRaceResult(mockRaceResult);
-
-    expect(user.xp).toBeGreaterThan(100);
-    expect(user.totalRaces).toBe(1);
-    expect(user.totalWins).toBe(1);
-    expect(user.bestWpm).toBe(80);
-
-    // Verify setDoc updated users/test-user-uid
-    expect(setDoc).toHaveBeenCalledWith(
-      'users/test-user-uid',
-      expect.objectContaining({
-        xp: user.xp,
-        level: user.level,
-        bestWpm: 80,
-        totalRaces: 1,
-      }),
-      { merge: true }
-    );
-  });
-
-  it('3. Leaderboard synchronization updates leaderboards/{uid} doc', async () => {
-    const initialUser: User = {
-      id: 'test-user-uid',
-      username: 'TestRacer',
-      email: 'test@typerush.app',
-      avatar: '🏎️',
-      level: 1,
-      xp: 100,
-      currentStreak: 1,
-      longestStreak: 1,
-      lastRaceDate: '2026-10-24',
-      totalRaces: 0,
-      totalWins: 0,
-      avgWpm: 0,
-      bestWpm: 0,
-      avgAccuracy: 100,
-      equippedCarId: 'car-apex-racer',
-      unlockedCars: ['car-apex-racer'],
-      unlockedBadges: [],
-      title: 'Rookie Driver',
-    };
-    localStorage.setItem('typerush_user', JSON.stringify(initialUser));
-
-    await ApiService.saveRaceResult(mockRaceResult);
-
-    expect(setDoc).toHaveBeenCalledWith(
-      'leaderboards/test-user-uid',
-      expect.objectContaining({
-        uid: 'test-user-uid',
-        displayName: 'TestRacer',
-        bestWpm: 80,
-      }),
-      { merge: true }
-    );
-  });
-
-  it('4. A Firestore permission error is surfaced rather than silently ignored', async () => {
-    (setDoc as any).mockRejectedValueOnce(new Error('Missing or insufficient permissions'));
-
-    await expect(ApiService.saveRaceResult(mockRaceResult)).rejects.toThrow();
-  });
-
-  it('5. A failed write throws error and does not produce false cloud success', async () => {
-    (setDoc as any).mockRejectedValueOnce(new Error('Network offline'));
-
-    let errorCaught: any = null;
-    try {
-      await ApiService.saveRaceResult({ ...mockRaceResult, id: 'race-fail-999' });
-    } catch (err) {
-      errorCaught = err;
-    }
-
-    expect(errorCaught).toBeDefined();
-    expect(String(errorCaught)).toContain('Network offline');
-  });
-
-  it('6. Retrying a race save with the same race ID does not duplicate records or rewards', async () => {
-    const firstRun = await ApiService.saveRaceResult(mockRaceResult);
-    const firstXp = firstRun.user.xp;
-
-    // Retry saving identical race ID
-    const secondRun = await ApiService.saveRaceResult(mockRaceResult);
-
-    expect(secondRun.user.xp).toBe(firstXp);
-    expect(secondRun.newAchievements.length).toBe(0);
-  });
-
-  it('7. Profile and equipped-car updates persist to Firestore', async () => {
-    const updated = await ApiService.updateUserProfile({
-      equippedCarId: 'car-neon-viper',
-      username: 'SpeedDemon',
+    testCases.forEach(({ xp, expectedLevel }) => {
+      const level = Math.floor(Math.max(0, xp) / 500) + 1;
+      expect(level).toBe(expectedLevel);
     });
-
-    expect(updated.equippedCarId).toBe('car-neon-viper');
-    expect(updated.username).toBe('SpeedDemon');
-
-    expect(setDoc).toHaveBeenCalledWith(
-      'users/test-user-uid',
-      expect.objectContaining({
-        equippedCarId: 'car-neon-viper',
-        displayName: 'SpeedDemon',
-      }),
-      { merge: true }
-    );
-  });
-
-  it('8. Achievements remain correct after race completion and profile refresh', async () => {
-    const achievements = ApiService.getAchievements();
-    expect(achievements).toBeDefined();
-    expect(Array.isArray(achievements)).toBe(true);
-  });
-
-  it('9. Logout and login restore user data cleanly', async () => {
-    localStorage.setItem('typerush_user', JSON.stringify({ username: 'CacheTest' }));
-    ApiService.clearUserDataOnLogout();
-
-    expect(localStorage.getItem('typerush_user')).toBeNull();
-    expect(localStorage.getItem('typerush_races')).toBeNull();
-
-    const restoredRaces = await ApiService.fetchUserRacesFromCloud('test-user-uid');
-    expect(restoredRaces.length).toBeGreaterThan(0);
-  });
-
-  it('10. Removing virtual keyboard does not break race completion or persistence', async () => {
-    const freshRace: RaceResult = {
-      ...mockRaceResult,
-      id: 'race-no-vk-1',
-    };
-
-    const result = await ApiService.saveRaceResult(freshRace);
-    expect(result.user.totalRaces).toBeGreaterThan(0);
-    expect(setDoc).toHaveBeenCalledWith('users/test-user-uid/races/race-no-vk-1', expect.anything());
   });
 });

@@ -90,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const computedEquippedCarId =
           data.equippedCarId || (isSameUser ? existingLocalUser.equippedCarId : null) || 'car-apex-racer';
 
-        const profile: User = {
+        const initialProfile: User = {
           id: fbUser.uid,
           username: data.displayName || fbUser.displayName || (isSameUser ? existingLocalUser.username : null) || 'Driver',
           email: fbUser.email || '',
@@ -115,27 +115,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: data.title || (isSameUser ? existingLocalUser.title : null) || 'Rookie Driver',
         };
 
+        // Evaluate achievements dynamically from restored stats and race history
+        const evaluatedAchievements = ApiService.getAchievements(initialProfile);
+        const resolvedUnlockedBadges = evaluatedAchievements.filter((a) => a.unlocked).map((a) => a.id);
+        initialProfile.unlockedBadges = resolvedUnlockedBadges;
+
+        // Apply authoritative XP reconciliation to fix inflated cloud/local XP
+        const profile = ApiService.reconcileUserXp(initialProfile, races);
+
         if (auth.currentUser?.uid === fbUser.uid) {
           setUserProfile(profile);
           localStorage.setItem('typerush_user', JSON.stringify(profile));
         }
 
-        // Evaluate achievements dynamically from restored stats and race history
-        const evaluatedAchievements = ApiService.getAchievements(profile);
-        const resolvedUnlockedBadges = evaluatedAchievements.filter((a) => a.unlocked).map((a) => a.id);
-
-        profile.unlockedBadges = resolvedUnlockedBadges;
-        if (auth.currentUser?.uid === fbUser.uid) {
-          setUserProfile({ ...profile });
-          localStorage.setItem('typerush_user', JSON.stringify(profile));
-        }
-
-        // Sync back bestWpm and reconciled unlockedBadges if Firestore differs
+        // Sync back bestWpm and reconciled unlockedBadges/xp if Firestore differs
         const currentBadgesJson = JSON.stringify(data.unlockedBadges || []);
         const resolvedBadgesJson = JSON.stringify(resolvedUnlockedBadges);
 
         if (
-          (data.xp || 0) < computedXp ||
+          data.xp !== profile.xp ||
           (data.bestWpm || 0) < computedBestWpm ||
           (data.totalRaces || 0) < computedTotalRaces ||
           currentBadgesJson !== resolvedBadgesJson
@@ -144,8 +142,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             userRef,
             {
               uid: fbUser.uid,
-              xp: computedXp,
-              level: computedLevel,
+              xp: profile.xp,
+              level: profile.level,
               bestWpm: computedBestWpm,
               avgWpm: computedAvgWpm,
               avgAccuracy: computedAvgAcc,

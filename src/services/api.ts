@@ -63,25 +63,65 @@ const DEFAULT_GUEST_USER: User = {
 };
 
 export class ApiService {
+  static reconcileUserXp(user: User, races: RaceResult[]): User {
+    const validRaces = Array.isArray(races) ? races : [];
+    const raceXpSum = validRaces.reduce((sum, r) => sum + (r.xpEarned || 0), 0);
+
+    const validBadges = Array.isArray(user.unlockedBadges) ? user.unlockedBadges : [];
+    const badgeXpSum = validBadges.reduce((sum, badgeId) => {
+      if (badgeId.startsWith('ach-level')) return sum;
+      const ach = ACHIEVEMENTS_DATA.find((a) => a.id === badgeId);
+      return sum + (ach ? ach.rewardXp || 0 : 0);
+    }, 0);
+
+    const baseUserXp = 100;
+    const calculatedTotalXp = baseUserXp + raceXpSum + badgeXpSum;
+
+    let reconciledXp = user.xp;
+    // Reconcile if user XP is artificially inflated beyond calculated total or if races are present
+    if (validRaces.length > 0 && user.xp > calculatedTotalXp + 100) {
+      console.warn(`[ApiService] Reconciling inflated user XP from ${user.xp} to calculated ${calculatedTotalXp}`);
+      reconciledXp = calculatedTotalXp;
+    } else if (validRaces.length > 0 && user.xp < calculatedTotalXp) {
+      reconciledXp = calculatedTotalXp;
+    } else if (validRaces.length === 0 && user.xp > 500) {
+      reconciledXp = baseUserXp;
+    }
+
+    const reconciledLevel = Math.floor(Math.max(0, reconciledXp) / 500) + 1;
+
+    return {
+      ...user,
+      xp: reconciledXp,
+      level: reconciledLevel,
+    };
+  }
+
   static getUser(): User {
     const saved = localStorage.getItem(STORAGE_KEYS.USER);
     let user: User = saved ? JSON.parse(saved) : { ...DEFAULT_GUEST_USER };
-
     const races = this.getRaces();
+
+    user = this.reconcileUserXp(user, races);
+
     if (races.length > 0) {
       const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
       if (maxRaceWpm > (user.bestWpm || 0)) {
         user.bestWpm = maxRaceWpm;
         user.totalRaces = Math.max(user.totalRaces || 0, races.length);
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       }
     }
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     return user;
   }
 
   static async updateUserProfile(updates: Partial<User>): Promise<User> {
     const current = this.getUser();
-    const updated = { ...current, ...updates };
+    let updated = { ...current, ...updates };
+
+    if (updates.xp !== undefined) {
+      updated.level = Math.floor(Math.max(0, updated.xp) / 500) + 1;
+    }
 
     const currentUser = auth.currentUser;
     if (currentUser) {
@@ -284,20 +324,20 @@ export class ApiService {
     const avgAcc = Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / totalRaces) * 10) / 10;
 
     let newXp = user.xp + result.xpEarned;
-    const newLevel = Math.floor(newXp / 500) + 1;
+    const interimLevel = Math.floor(Math.max(0, newXp) / 500) + 1;
 
     const unlockedCars = [...user.unlockedCars];
     CAR_MODELS.forEach((car) => {
-      if (newLevel >= car.unlockLevel && newXp >= car.priceXp && !unlockedCars.includes(car.id)) {
+      if (interimLevel >= car.unlockLevel && newXp >= car.priceXp && !unlockedCars.includes(car.id)) {
         unlockedCars.push(car.id);
       }
     });
 
     let title = user.title;
-    if (newLevel >= 12) title = 'Racing Champion';
-    else if (newLevel >= 8) title = 'Pro Racer';
-    else if (newLevel >= 5) title = 'Speed Driver';
-    else if (newLevel >= 3) title = 'Street Racer';
+    if (interimLevel >= 12) title = 'Racing Champion';
+    else if (interimLevel >= 8) title = 'Pro Racer';
+    else if (interimLevel >= 5) title = 'Speed Driver';
+    else if (interimLevel >= 3) title = 'Street Racer';
 
     const today = new Date().toISOString().split('T')[0];
     let streak = user.currentStreak;
@@ -318,7 +358,6 @@ export class ApiService {
     const newUnlocked: Achievement[] = [];
     const unlockedBadges = [...user.unlockedBadges];
 
-    // Compute current win streak from recent races
     let currentWinStreak = 0;
     for (const r of races) {
       if (r.finishPosition === 1) currentWinStreak++;
@@ -386,7 +425,7 @@ export class ApiService {
           }
         } else if (ach.category === 'legendary') {
           if (ach.id.startsWith('ach-level')) {
-            val = newLevel;
+            val = interimLevel;
           } else if (ach.id.startsWith('ach-collector')) {
             val = unlockedCars.length;
           } else if (ach.id === 'ach-legend-badge-master') {
@@ -401,18 +440,18 @@ export class ApiService {
           newUnlocked.push(ach);
           if (!unlockedBadges.includes(ach.id)) {
             unlockedBadges.push(ach.id);
-            newXp += ach.rewardXp; // Award achievement reward XP exactly once
+            if (!ach.id.startsWith('ach-level')) {
+              newXp += ach.rewardXp;
+            }
           }
         }
       }
     });
 
-    const finalLevel = Math.floor(newXp / 500) + 1;
-
-    const updatedUser: User = {
+    let updatedUser: User = {
       ...user,
       xp: newXp,
-      level: finalLevel,
+      level: Math.floor(Math.max(0, newXp) / 500) + 1,
       totalRaces,
       totalWins: wins,
       avgWpm,
@@ -425,6 +464,11 @@ export class ApiService {
       longestStreak: Math.max(user.longestStreak, streak),
       lastRaceDate: today,
     };
+
+    // Reconcile user XP authoritatively
+    updatedUser = this.reconcileUserXp(updatedUser, races);
+    const finalLevel = updatedUser.level;
+    const finalXp = updatedUser.xp;
 
     // Save to Local Storage Cache
     localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
@@ -439,7 +483,7 @@ export class ApiService {
           userRef,
           {
             uid: currentUser.uid,
-            xp: newXp,
+            xp: finalXp,
             level: finalLevel,
             totalRaces,
             wins,
@@ -480,7 +524,7 @@ export class ApiService {
             avgAccuracy: avgAcc,
             totalWins: wins,
             totalRaces,
-            xp: newXp,
+            xp: finalXp,
             equippedCarId: updatedUser.equippedCarId,
             updatedAt: serverTimestamp(),
           },
