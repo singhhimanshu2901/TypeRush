@@ -82,10 +82,19 @@ const DEFAULT_GUEST_USER: User = {
 export class ApiService {
   static reconcileUserXp(user: User, races: RaceResult[]): User {
     const validRaces = Array.isArray(races) ? races : [];
-    const raceXpSum = validRaces.reduce((sum, r) => sum + (r.xpEarned || 0), 0);
+    // Deduplicate races by id
+    const uniqueRacesMap = new Map<string, RaceResult>();
+    validRaces.forEach((r) => {
+      if (r && r.id && !uniqueRacesMap.has(r.id)) {
+        uniqueRacesMap.set(r.id, r);
+      }
+    });
+    const uniqueRaces = Array.from(uniqueRacesMap.values());
+    const raceXpSum = uniqueRaces.reduce((sum, r) => sum + (r.xpEarned || 0), 0);
 
     const validBadges = Array.isArray(user.unlockedBadges) ? user.unlockedBadges : [];
-    const badgeXpSum = validBadges.reduce((sum, badgeId) => {
+    const uniqueBadges = Array.from(new Set(validBadges));
+    const badgeXpSum = uniqueBadges.reduce((sum, badgeId) => {
       if (badgeId.startsWith('ach-level')) return sum;
       const ach = ACHIEVEMENTS_DATA.find((a) => a.id === badgeId);
       return sum + (ach ? ach.rewardXp || 0 : 0);
@@ -93,24 +102,13 @@ export class ApiService {
 
     const baseUserXp = 100;
     const calculatedTotalXp = baseUserXp + raceXpSum + badgeXpSum;
-
-    let reconciledXp = user.xp;
-    // Reconcile if user XP is artificially inflated beyond calculated total or if races are present
-    if (validRaces.length > 0 && user.xp > calculatedTotalXp + 100) {
-      console.warn(`[ApiService] Reconciling inflated user XP from ${user.xp} to calculated ${calculatedTotalXp}`);
-      reconciledXp = calculatedTotalXp;
-    } else if (validRaces.length > 0 && user.xp < calculatedTotalXp) {
-      reconciledXp = calculatedTotalXp;
-    } else if (validRaces.length === 0 && user.xp > 500) {
-      reconciledXp = baseUserXp;
-    }
-
-    const reconciledLevel = Math.floor(Math.max(0, reconciledXp) / 500) + 1;
+    const calculatedLevel = Math.floor(Math.max(0, calculatedTotalXp) / 500) + 1;
 
     return {
       ...user,
-      xp: reconciledXp,
-      level: reconciledLevel,
+      xp: calculatedTotalXp,
+      level: calculatedLevel,
+      unlockedBadges: uniqueBadges,
     };
   }
 
@@ -922,7 +920,12 @@ export class ApiService {
         7000,
         'Firestore leaderboard query timed out. Please check your network connection.'
       );
-      console.log('[RaceDiag] Leaderboard snapshot retrieved. Total docs:', snapshot.size);
+      const docIds = snapshot.docs.map((d) => d.id);
+      console.log('[RaceDiag] Leaderboard snapshot retrieved.', {
+        authUid: currentUser?.uid || 'anonymous',
+        docsCount: snapshot.size,
+        docUids: docIds,
+      });
 
       const userMap = new Map<string, LeaderboardEntry>();
 
@@ -968,6 +971,7 @@ export class ApiService {
       }
 
       const allEntries = Array.from(userMap.values());
+      console.log('[RaceDiag] Leaderboard entries count after mapping and filtering:', allEntries.length);
 
       // 3. Sort by bestWpm descending (primary) and xp descending (secondary)
       allEntries.sort((a, b) => b.bestWpm - a.bestWpm || b.xp - a.xp);

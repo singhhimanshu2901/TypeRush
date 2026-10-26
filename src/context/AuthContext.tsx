@@ -54,28 +54,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = snapshot.data();
 
         // Calculate metrics strictly from cloud Firestore document and cloud race subcollection
+        const hasNoRaces = races.length === 0 && (data.totalRaces === 0 || data.totalRaces === undefined);
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
-        const computedBestWpm = data.bestWpm !== undefined ? data.bestWpm : maxRaceWpm;
-        const computedTotalRaces = data.totalRaces !== undefined ? data.totalRaces : races.length;
-        const computedWins = data.wins ?? data.totalWins ?? races.filter((r) => r.finishPosition === 1).length;
-        const computedXp = data.xp !== undefined ? data.xp : 100;
-        const computedLevel = data.level !== undefined ? data.level : Math.floor(Math.max(0, computedXp) / 500) + 1;
+
+        const computedBestWpm = hasNoRaces ? 0 : (data.bestWpm !== undefined ? data.bestWpm : maxRaceWpm);
+        const computedTotalRaces = hasNoRaces ? 0 : (data.totalRaces !== undefined ? data.totalRaces : races.length);
+        const computedWins = hasNoRaces ? 0 : (data.wins ?? data.totalWins ?? races.filter((r) => r.finishPosition === 1).length);
+        const computedXp = hasNoRaces ? 100 : (data.xp !== undefined ? data.xp : 100);
+        const computedLevel = hasNoRaces ? 1 : (data.level !== undefined ? data.level : Math.floor(Math.max(0, computedXp) / 500) + 1);
 
         const computedUnlockedCars = Array.isArray(data.unlockedCars) && data.unlockedCars.length > 0
           ? data.unlockedCars
           : ['car-apex-racer'];
 
-        const computedUnlockedBadges = Array.isArray(data.unlockedBadges)
-          ? data.unlockedBadges
-          : [];
+        const computedUnlockedBadges = hasNoRaces
+          ? []
+          : (Array.isArray(data.unlockedBadges) ? data.unlockedBadges : []);
 
         const computedAvgWpm = races.length > 0
           ? Math.round(races.reduce((acc, r) => acc + (r.netWpm || 0), 0) / races.length)
-          : data.avgWpm || 0;
+          : (hasNoRaces ? 0 : (data.avgWpm || 0));
 
         const computedAvgAcc = races.length > 0
           ? Math.round((races.reduce((acc, r) => acc + (r.accuracy || 0), 0) / races.length) * 10) / 10
-          : data.avgAccuracy || 100;
+          : (hasNoRaces ? 100 : (data.avgAccuracy || 100));
 
         const computedEquippedCarId = data.equippedCarId || 'car-apex-racer';
 

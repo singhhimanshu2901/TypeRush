@@ -324,4 +324,119 @@ describe('Data Persistence & XP Progression System', () => {
     const savedRaces = ApiService.getRaces();
     expect(savedRaces).toHaveLength(0);
   });
+
+  it('10. Multi-user leaderboard returns all eligible driver documents ranked deterministically', async () => {
+    const { auth } = await import('../../config/firebase');
+    (auth as any).currentUser = { uid: 'driver-c', displayName: 'DriverC' };
+
+    const mockDocs = [
+      {
+        id: 'driver-a',
+        data: () => ({
+          uid: 'driver-a',
+          displayName: 'SpeedyAlpha',
+          bestWpm: 120,
+          avgAccuracy: 99.1,
+          totalWins: 25,
+          totalRaces: 30,
+          xp: 8500,
+          level: 17,
+        }),
+      },
+      {
+        id: 'driver-b',
+        data: () => ({
+          uid: 'driver-b',
+          displayName: 'NitroBeta',
+          bestWpm: 105,
+          avgAccuracy: 98.4,
+          totalWins: 18,
+          totalRaces: 24,
+          xp: 6200,
+          level: 13,
+        }),
+      },
+      {
+        id: 'driver-c',
+        data: () => ({
+          uid: 'driver-c',
+          displayName: 'DriverC',
+          bestWpm: 92,
+          avgAccuracy: 97.5,
+          totalWins: 10,
+          totalRaces: 15,
+          xp: 3400,
+          level: 7,
+        }),
+      },
+    ];
+
+    const { getDocs } = await import('firebase/firestore');
+    vi.mocked(getDocs).mockResolvedValueOnce({
+      empty: false,
+      docs: mockDocs,
+      forEach: (cb: (doc: any) => void) => mockDocs.forEach(cb),
+    } as any);
+
+    const entries = await ApiService.getLeaderboardFromCloud();
+
+    expect(entries).toHaveLength(3);
+    expect(entries[0].userId).toBe('driver-a');
+    expect(entries[0].rank).toBe(1);
+    expect(entries[0].bestWpm).toBe(120);
+
+    expect(entries[1].userId).toBe('driver-b');
+    expect(entries[1].rank).toBe(2);
+
+    expect(entries[2].userId).toBe('driver-c');
+    expect(entries[2].rank).toBe(3);
+  });
+
+  it('11. Canonical XP and Level match across profile and leaderboard, preventing post-reset resurrection', async () => {
+    // 1. Create a user with races and badges
+    const race1: RaceResult = {
+      id: 'race-canon-1',
+      userId: 'guest-1',
+      username: 'GuestDriver',
+      mode: 'ai',
+      difficulty: 'intermediate',
+      passageId: 'p1',
+      passageTitle: 'Title 1',
+      grossWpm: 70,
+      netWpm: 70,
+      accuracy: 99,
+      durationSeconds: 20,
+      correctChars: 150,
+      incorrectChars: 0,
+      backspaces: 0,
+      finishPosition: 1,
+      totalParticipants: 4,
+      xpEarned: 250,
+      date: new Date().toISOString(),
+    };
+
+    const saveResult = await ApiService.saveRaceResult(race1);
+    const profileBeforeReset = saveResult.user;
+
+    // Canonical check: Profile level matches Math.floor(xp / 500) + 1
+    expect(profileBeforeReset.level).toBe(Math.floor(profileBeforeReset.xp / 500) + 1);
+
+    // 2. Perform reset
+    const resetUser = await ApiService.resetUserStats();
+    expect(resetUser.xp).toBe(100);
+    expect(resetUser.level).toBe(1);
+    expect(resetUser.totalRaces).toBe(0);
+    expect(resetUser.unlockedBadges).toEqual([]);
+
+    // 3. Verify calling getUser or reconcileUserXp after reset preserves 100 XP and Level 1
+    const userAfterGet = ApiService.getUser();
+    expect(userAfterGet.xp).toBe(100);
+    expect(userAfterGet.level).toBe(1);
+    expect(userAfterGet.totalRaces).toBe(0);
+
+    const reconciledAfterReset = ApiService.reconcileUserXp(userAfterGet, []);
+    expect(reconciledAfterReset.xp).toBe(100);
+    expect(reconciledAfterReset.level).toBe(1);
+    expect(reconciledAfterReset.unlockedBadges).toHaveLength(0);
+  });
 });
