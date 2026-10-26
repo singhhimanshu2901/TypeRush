@@ -5,7 +5,7 @@ interface TypingAreaProps {
   text: string;
   isRacing: boolean;
   onTyped: (input: string, correctCount: number, errorCount: number, backspaceCount: number) => void;
-  onFinish: () => void;
+  onFinish: (finalInput?: string, finalCorrect?: number, finalErrors?: number, finalBackspaces?: number) => void;
   wpm: number;
   accuracy: number;
   elapsedTime: number;
@@ -122,8 +122,8 @@ export const TypingArea: React.FC<TypingAreaProps> = ({
 
     onTyped(value, correct, errors, backspaceCount);
 
-    if (value.length === text.length && correct === text.length) {
-      onFinish();
+    if (value.length === text.length) {
+      onFinish(value, correct, errors, backspaceCount);
     }
   };
 

@@ -188,10 +188,13 @@ export const RacePage: React.FC<RacePageProps> = ({
     };
   }, [isRacing, isPaused, correctCount, errorCount, passage.charCount, mode]);
 
+  const latestTypedRef = useRef({ input: '', correct: 0, errors: 0, backspaces: 0 });
+
   // Handle Typing Input from TypingArea
   const handleTyped = (input: string, correct: number, errors: number, backspaces: number) => {
     if (isPaused || raceFinishedRef.current) return;
 
+    latestTypedRef.current = { input, correct, errors, backspaces };
     setUserTyped(input);
     setCorrectCount(correct);
     setErrorCount(errors);
@@ -215,22 +218,27 @@ export const RacePage: React.FC<RacePageProps> = ({
   };
 
   // Single-Execution Guaranteed Race Finish Handler
-  const handleFinish = async () => {
+  const handleFinish = async (finalInput?: string, finalCorrect?: number, finalErrors?: number, finalBackspaces?: number) => {
     if (raceFinishedRef.current) return;
     raceFinishedRef.current = true;
     setIsRacing(false);
 
     if (timerRef.current) clearInterval(timerRef.current);
 
+    const inputVal = finalInput !== undefined ? finalInput : (latestTypedRef.current.input || userTyped);
+    const correctVal = finalCorrect !== undefined ? finalCorrect : (latestTypedRef.current.correct || correctCount);
+    const errorVal = finalErrors !== undefined ? finalErrors : (latestTypedRef.current.errors || errorCount);
+    const backspaceVal = finalBackspaces !== undefined ? finalBackspaces : (latestTypedRef.current.backspaces || backspaceCount);
+
     const exactMs = startTimeRef.current ? performance.now() - startTimeRef.current : elapsedTime * 1000;
     const durationSeconds = Math.max(1, Math.round(exactMs / 1000));
 
-    const grossWpm = calculateGrossWpm(userTyped.length, durationSeconds);
-    const netWpm = calculateNetWpm(correctCount, errorCount, durationSeconds);
-    const finalAccuracy = calculateAccuracy(correctCount, userTyped.length);
+    const grossWpm = calculateGrossWpm(inputVal.length, durationSeconds);
+    const netWpm = calculateNetWpm(correctVal, errorVal, durationSeconds);
+    const finalAccuracy = calculateAccuracy(correctVal, inputVal.length);
 
     // Determine final finish position
-    let userProgress = 1.0;
+    let userProgress = passage.charCount > 0 ? Math.min(1.0, inputVal.length / passage.charCount) : 1.0;
     let position = 1;
 
     if (mode !== 'solo') {
@@ -255,9 +263,9 @@ export const RacePage: React.FC<RacePageProps> = ({
       netWpm,
       accuracy: finalAccuracy,
       durationSeconds,
-      correctChars: correctCount,
-      incorrectChars: errorCount,
-      backspaces: backspaceCount,
+      correctChars: correctVal,
+      incorrectChars: errorVal,
+      backspaces: backspaceVal,
       finishPosition: position,
       totalParticipants: mode === 'solo' ? 1 : aiRacers.length + 1,
       xpEarned,

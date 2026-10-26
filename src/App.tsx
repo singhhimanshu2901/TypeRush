@@ -62,14 +62,18 @@ export function App() {
 
   const handleFinishRace = async (result: RaceResult) => {
     setLastResult(result);
+    setActiveTab('result');
+
     try {
       const { user: updated } = await ApiService.saveRaceResult(result);
       setLocalUser(updated);
-      await refreshProfile();
+      try {
+        await refreshProfile();
+      } catch (profileErr) {
+        console.warn('[App] Profile refresh skipped or failed:', profileErr);
+      }
     } catch (err) {
-      console.error('[App] Failed to save race result to Firestore:', err);
-    } finally {
-      setActiveTab('result');
+      console.error('[App] Failed to save race result:', err);
     }
   };
 

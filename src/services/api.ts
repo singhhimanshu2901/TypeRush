@@ -531,7 +531,8 @@ export class ApiService {
           { merge: true }
         );
       } catch (err) {
-        handleFirestoreError(err, 'write', `users/${currentUser.uid}/races/${result.id}`);
+        console.warn(`[ApiService] Firestore save failed for race ${result.id}. Result preserved locally:`, err);
+        result.syncError = true;
       }
     }
 
@@ -608,7 +609,7 @@ export class ApiService {
       localStorage.setItem(STORAGE_KEYS.RACES, JSON.stringify(races));
       return races;
     } catch (err) {
-      handleFirestoreError(err, 'list', `users/${uid}/races`);
+      console.warn(`[ApiService] Cloud race fetch failed for ${uid}. Using local race records:`, err);
       return this.getRaces();
     }
   }

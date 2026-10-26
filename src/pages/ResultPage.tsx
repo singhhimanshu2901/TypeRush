@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { User, RaceResult } from '../types';
 import confetti from 'canvas-confetti';
-import { Trophy, Gauge, Target, RotateCcw, ArrowRight, Zap, Award, Flame } from 'lucide-react';
+import { Trophy, Gauge, Target, RotateCcw, ArrowRight, Zap, Award, Flame, ShieldAlert } from 'lucide-react';
 
 interface ResultPageProps {
   user: User;
@@ -45,6 +45,14 @@ export const ResultPage: React.FC<ResultPageProps> = ({ user, result, onRetry, o
         <div className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-black text-sm">
           <Zap className="w-4 h-4 fill-emerald-400" /> +{result.xpEarned} XP GAINED
         </div>
+
+        {/* Sync Error Warning if Cloud persistence failed */}
+        {result.syncError && (
+          <div className="mt-4 max-w-md mx-auto p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs font-semibold flex items-center justify-center gap-2">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>Saved locally. Cloud synchronization pending (offline/network issue).</span>
+          </div>
+        )}
       </div>
 
       {/* Race Telemetry Breakdown Cards */}

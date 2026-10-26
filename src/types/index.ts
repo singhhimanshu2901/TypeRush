@@ -52,6 +52,7 @@ export interface RaceResult {
   totalParticipants: number;
   xpEarned: number;
   date: string;
+  syncError?: boolean;
 }
 
 export type CarCategory = 'SUV' | 'Luxury' | 'Sports' | 'Supercar' | 'Hypercar';
