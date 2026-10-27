@@ -14,6 +14,7 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
@@ -232,82 +233,93 @@ export class ApiService {
         const userRef = doc(db, 'users', currentUser.uid);
         const lbRef = doc(db, 'leaderboards', currentUser.uid);
 
-        await withTimeout(
-          Promise.all([
-            setDoc(
-              userRef,
-              {
-                uid: currentUser.uid,
-                displayName: resetUser.username,
-                email: resetUser.email || currentUser.email || '',
-                photoURL: resetUser.avatar,
-                level: 1,
-                xp: 100,
-                currentStreak: 0,
-                longestStreak: 0,
-                lastRaceDate: null,
-                lastPlayedDate: null,
-                totalRaces: 0,
-                wins: 0,
-                totalWins: 0,
-                avgWpm: 0,
-                bestWpm: 0,
-                avgAccuracy: 100,
-                equippedCarId: 'car-apex-racer',
-                unlockedCars: ['car-apex-racer'],
-                unlockedBadges: [],
-                title: 'Rookie Driver',
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            ),
-            setDoc(
-              lbRef,
-              {
-                uid: currentUser.uid,
-                displayName: resetUser.username,
-                avatar: resetUser.avatar,
-                level: 1,
-                title: 'Rookie Driver',
-                bestWpm: 0,
-                avgAccuracy: 100,
-                totalWins: 0,
-                totalRaces: 0,
-                xp: 100,
-                equippedCarId: 'car-apex-racer',
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            ),
-          ]),
-          6000,
-          'Firestore user profile and leaderboard reset timed out.'
+        // 1. Write reset profile and leaderboard in writeBatch
+        const initBatch = writeBatch(db);
+        initBatch.set(
+          userRef,
+          {
+            uid: currentUser.uid,
+            displayName: resetUser.username,
+            email: resetUser.email || currentUser.email || '',
+            photoURL: resetUser.avatar,
+            level: 1,
+            xp: 100,
+            currentStreak: 0,
+            longestStreak: 0,
+            lastRaceDate: null,
+            lastPlayedDate: null,
+            totalRaces: 0,
+            wins: 0,
+            totalWins: 0,
+            avgWpm: 0,
+            bestWpm: 0,
+            avgAccuracy: 100,
+            equippedCarId: 'car-apex-racer',
+            unlockedCars: ['car-apex-racer'],
+            unlockedBadges: [],
+            title: 'Rookie Driver',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        initBatch.set(
+          lbRef,
+          {
+            uid: currentUser.uid,
+            displayName: resetUser.username,
+            avatar: resetUser.avatar,
+            level: 1,
+            title: 'Rookie Driver',
+            bestWpm: 0,
+            avgAccuracy: 100,
+            totalWins: 0,
+            totalRaces: 0,
+            xp: 100,
+            equippedCarId: 'car-apex-racer',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
         );
 
-        console.log('[RaceDiag] Clearing user races subcollection in Firestore');
+        await withTimeout(initBatch.commit(), 6000, 'Firestore user profile and leaderboard reset timed out.');
+
+        // 2. Fetch and batch delete all race subcollection documents in chunks of 400
+        console.log('[RaceDiag] Fetching user races subcollection in Firestore for deletion');
         const racesSubcollRef = collection(db, 'users', currentUser.uid, 'races');
         const raceDocsSnap = await withTimeout(
           getDocs(racesSubcollRef),
           5000,
           'Fetching subcollection races for deletion timed out.'
-        ).catch(() => null);
+        );
 
-        if (raceDocsSnap && !raceDocsSnap.empty) {
-          await Promise.all(
-            raceDocsSnap.docs.map(async (docSnap) => {
-              try {
-                await withTimeout(deleteDoc(docSnap.ref), 3000, 'Subcollection delete timed out');
-              } catch (e) {
-                console.warn('[resetUserStats] Subcollection race doc delete skipped:', e);
-              }
-            })
-          );
+        if (!raceDocsSnap.empty) {
+          const docs = raceDocsSnap.docs;
+          const chunkSize = 400;
+          console.log(`[RaceDiag] Deleting ${docs.length} subcollection race documents in batch chunks`);
+
+          for (let i = 0; i < docs.length; i += chunkSize) {
+            const chunk = docs.slice(i, i + chunkSize);
+            const delBatch = writeBatch(db);
+            chunk.forEach((docSnap) => {
+              delBatch.delete(docSnap.ref);
+            });
+            await withTimeout(
+              delBatch.commit(),
+              8000,
+              'Batch deletion of race history timed out.'
+            );
+          }
         }
         console.log('[RaceDiag] Firestore reset completed successfully.');
       } catch (err) {
         console.error('[RaceDiag] Firestore reset encountered error:', err);
         handleFirestoreError(err, 'reset', `users/${currentUser.uid}`);
       }
+    }
+
+    // Clear local import flags and caches
+    if (currentUser) {
+      localStorage.removeItem(`typerush_imported_${currentUser.uid}`);
     }
 
     // Reset Local Storage Caches

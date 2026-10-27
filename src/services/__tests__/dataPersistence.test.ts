@@ -24,6 +24,11 @@ vi.mock('firebase/firestore', () => ({
   setDoc: vi.fn(() => Promise.resolve()),
   updateDoc: vi.fn(() => Promise.resolve()),
   deleteDoc: vi.fn(() => Promise.resolve()),
+  writeBatch: vi.fn(() => ({
+    set: vi.fn(),
+    delete: vi.fn(),
+    commit: vi.fn(() => Promise.resolve()),
+  })),
   query: vi.fn(),
   orderBy: vi.fn(),
   limit: vi.fn(),
@@ -66,8 +71,8 @@ describe('Data Persistence & XP Progression System', () => {
 
     const { user, newAchievements } = await ApiService.saveRaceResult(race1);
     expect(newAchievements.length).toBeGreaterThan(0);
-    expect(user.xp).toBe(815); // 100 base + 200 race1 + unlocked badge rewards
-    expect(user.level).toBe(Math.floor(815 / 500) + 1); // Level 2
+    expect(user.xp).toBe(865); // 100 base + 200 race1 + unlocked badge rewards (565)
+    expect(user.level).toBe(Math.floor(865 / 500) + 1); // Level 2
   });
 
   it('3. Awarding 150 XP for second race increases balance proportionally', async () => {
@@ -116,8 +121,8 @@ describe('Data Persistence & XP Progression System', () => {
     };
 
     const { user } = await ApiService.saveRaceResult(race2);
-    expect(user.xp).toBe(1195); // 815 + 150 race2 + new badge rewards
-    expect(user.level).toBe(Math.floor(1195 / 500) + 1); // Level 3
+    expect(user.xp).toBe(1345); // 865 + 150 race2 + new badge rewards (330)
+    expect(user.level).toBe(Math.floor(1345 / 500) + 1); // Level 3
   });
 
   it('4. Saving same race twice does not award duplicate XP (Deduplication)', async () => {
@@ -143,10 +148,10 @@ describe('Data Persistence & XP Progression System', () => {
     };
 
     const res1 = await ApiService.saveRaceResult(race1);
-    expect(res1.user.xp).toBe(815);
+    expect(res1.user.xp).toBe(865);
 
     const res2 = await ApiService.saveRaceResult(race1);
-    expect(res2.user.xp).toBe(815); // Deduplicated, no increase
+    expect(res2.user.xp).toBe(865); // Deduplicated, no increase
     expect(res2.newAchievements).toHaveLength(0);
   });
 

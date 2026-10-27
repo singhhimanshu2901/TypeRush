@@ -54,7 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = snapshot.data();
 
         // Calculate metrics strictly from cloud Firestore document and cloud race subcollection
-        const hasNoRaces = races.length === 0 && (data.totalRaces === 0 || data.totalRaces === undefined);
+        const hasNoRaces = races.length === 0;
         const maxRaceWpm = races.reduce((max, r) => Math.max(max, r.netWpm || 0), 0);
 
         const computedBestWpm = hasNoRaces ? 0 : (data.bestWpm !== undefined ? data.bestWpm : maxRaceWpm);
