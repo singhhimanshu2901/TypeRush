@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { ApiService, withTimeout } from '../services/api';
+import { ApiService } from '../services/api';
 import { Edit3, Save, X, Loader2, CheckCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { WpmChart } from '../components/WpmChart';
 import { UserAvatar } from '../components/UserAvatar';
@@ -90,18 +90,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
 
     try {
       console.log('[RaceDiag] handleConfirmReset entry. Resetting user stats...');
-      const resetUser = await withTimeout(
-        ApiService.resetUserStats(),
-        10000,
-        'Reset operation timed out. Please check your connection and try again.'
-      );
+      const resetUser = await ApiService.resetUserStats();
 
       console.log('[RaceDiag] Calling onUserUpdate with resetUser profile...');
-      await withTimeout(
-        Promise.resolve(onUserUpdate(resetUser)),
-        8000,
-        'Profile update after reset timed out.'
-      );
+      await onUserUpdate(resetUser);
 
       console.log('[RaceDiag] Reset process completed successfully.');
       setSaveSuccess('All driving statistics and race history have been successfully reset.');

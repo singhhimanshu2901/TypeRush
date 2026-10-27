@@ -281,16 +281,12 @@ export class ApiService {
           { merge: true }
         );
 
-        await withTimeout(initBatch.commit(), 6000, 'Firestore user profile and leaderboard reset timed out.');
+        await initBatch.commit();
 
         // 2. Fetch and batch delete all race subcollection documents in chunks of 400
         console.log('[RaceDiag] Fetching user races subcollection in Firestore for deletion');
         const racesSubcollRef = collection(db, 'users', currentUser.uid, 'races');
-        const raceDocsSnap = await withTimeout(
-          getDocs(racesSubcollRef),
-          5000,
-          'Fetching subcollection races for deletion timed out.'
-        );
+        const raceDocsSnap = await getDocs(racesSubcollRef);
 
         if (!raceDocsSnap.empty) {
           const docs = raceDocsSnap.docs;
@@ -303,11 +299,7 @@ export class ApiService {
             chunk.forEach((docSnap) => {
               delBatch.delete(docSnap.ref);
             });
-            await withTimeout(
-              delBatch.commit(),
-              8000,
-              'Batch deletion of race history timed out.'
-            );
+            await delBatch.commit();
           }
         }
         console.log('[RaceDiag] Firestore reset completed successfully.');
@@ -609,11 +601,7 @@ export class ApiService {
     try {
       console.log('[RaceDiag] Fetching cloud races for uid:', uid);
       const racesSubcollRef = collection(db, 'users', uid, 'races');
-      const snap = await withTimeout(
-        getDocs(racesSubcollRef),
-        6000,
-        'Fetching cloud races timed out.'
-      );
+      const snap = await getDocs(racesSubcollRef);
 
       if (snap.empty) {
         console.log('[RaceDiag] Cloud races snapshot is empty.');
@@ -878,27 +866,23 @@ export class ApiService {
     try {
       console.log('[RaceDiag] syncLeaderboardEntry executing for:', currentUser.uid);
       const lbRef = doc(db, 'leaderboards', currentUser.uid);
-      await withTimeout(
-        setDoc(
-          lbRef,
-          {
-            uid: currentUser.uid,
-            displayName: user.username || currentUser.displayName || 'Driver',
-            avatar: user.avatar || currentUser.photoURL || '🏎️',
-            level: user.level || 1,
-            title: user.title || 'Rookie Driver',
-            bestWpm: user.bestWpm || 0,
-            avgAccuracy: user.avgAccuracy || 100,
-            totalWins: user.totalWins || 0,
-            totalRaces: user.totalRaces || 0,
-            xp: user.xp || 100,
-            equippedCarId: user.equippedCarId || 'car-apex-racer',
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        ),
-        5000,
-        'Syncing leaderboard entry timed out.'
+      await setDoc(
+        lbRef,
+        {
+          uid: currentUser.uid,
+          displayName: user.username || currentUser.displayName || 'Driver',
+          avatar: user.avatar || currentUser.photoURL || '🏎️',
+          level: user.level || 1,
+          title: user.title || 'Rookie Driver',
+          bestWpm: user.bestWpm || 0,
+          avgAccuracy: user.avgAccuracy || 100,
+          totalWins: user.totalWins || 0,
+          totalRaces: user.totalRaces || 0,
+          xp: user.xp || 100,
+          equippedCarId: user.equippedCarId || 'car-apex-racer',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
       );
       console.log('[RaceDiag] syncLeaderboardEntry succeeded.');
     } catch (err) {
@@ -927,11 +911,7 @@ export class ApiService {
       console.log('[RaceDiag] Querying leaderboards collection in Firestore...');
       // Query without forcing server-side orderBy so Firestore never excludes documents missing bestWpm
       const q = query(collection(db, 'leaderboards'), limit(100));
-      const snapshot = await withTimeout(
-        getDocs(q),
-        7000,
-        'Firestore leaderboard query timed out. Please check your network connection.'
-      );
+      const snapshot = await getDocs(q);
       const docIds = snapshot.docs.map((d) => d.id);
       console.log('[RaceDiag] Leaderboard snapshot retrieved.', {
         authUid: currentUser?.uid || 'anonymous',
